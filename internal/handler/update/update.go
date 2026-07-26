@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	models "github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/BREJJNEVV/metrics/internal/repository/db"
 )
 
@@ -67,7 +68,7 @@ func (h *UpdateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	log.Printf("value bytes: %v, string: %q", []byte(request.value), request.value)
 	log.Printf("typ=%q, name=%q, value=%q", request.typ, request.name, request.value)
 	switch request.typ {
-	case "gauge":
+	case models.Gauge:
 		fGauge, err := strconv.ParseFloat(request.value, 64)
 		if err != nil {
 			http.Error(w, "status bad request", http.StatusBadRequest)
@@ -79,7 +80,7 @@ func (h *UpdateHandler) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "InternalServerError", http.StatusInternalServerError)
 			return
 		}
-	case "counter":
+	case models.Counter:
 		icounter, err := strconv.ParseInt(request.value, 10, 64)
 		if err != nil {
 			http.Error(w, "status bad request2", http.StatusBadRequest)

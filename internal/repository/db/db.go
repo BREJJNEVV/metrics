@@ -34,3 +34,27 @@ func (r *MemStorage) Add(name string, value int64) error {
 
 	return nil
 }
+
+func (r *MemStorage) GetGauge(name string) (float64, bool) {
+	v, ok := r.gauge[name]
+	if !ok {
+		return 0, false
+	}
+	return v, true
+}
+
+func (r *MemStorage) GetCounter(name string) (int64, bool) {
+	v, ok := r.counter[name]
+	if !ok {
+		return 0, false
+	}
+	return v, true
+}
+
+func (ms *MemStorage) Gauges() map[string]float64 {
+	return ms.gauge
+}
+
+func (ms *MemStorage) Counters() map[string]int64 {
+	return ms.counter
+}

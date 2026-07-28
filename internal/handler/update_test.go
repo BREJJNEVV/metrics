@@ -1,9 +1,11 @@
-package update
+package handler
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/go-chi/chi"
 )
 
 type mockRepository struct {
@@ -13,19 +15,26 @@ type mockRepository struct {
 	SetCall  bool
 	SetName  string
 	SetValue float64
+	GetCall  bool
+
+	gauge   map[string]float64
+	counter map[string]int64
 }
 
 func TestUpdateGauge(t *testing.T) {
 
 	mock := &mockRepository{}
-	updHandler := UpdateHandler{
+	updHandler := MetricService{
 		repo: mock,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/123.45", nil)
 	req.Header.Set("Content-Type", "text/plain")
+
+	r := chi.NewRouter()
+	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", updHandler.Update)
 	w := httptest.NewRecorder()
-	updHandler.Update(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
@@ -48,14 +57,17 @@ func TestUpdateGauge(t *testing.T) {
 func TestUpdateCounter(t *testing.T) {
 
 	mock := &mockRepository{}
-	updHandler := UpdateHandler{
+	updHandler := MetricService{
 		repo: mock,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/update/counter/PollCount/10", nil)
 	req.Header.Set("Content-Type", "text/plain")
+
+	r := chi.NewRouter()
+	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", updHandler.Update)
 	w := httptest.NewRecorder()
-	updHandler.Update(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
@@ -103,7 +115,7 @@ func TestUpdateErrors(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/gauge/Alloc/",
 			contentType: "text/plain",
-			code:        http.StatusBadRequest,
+			code:        http.StatusNotFound,
 		},
 		{
 			name:        "wrong type of metric",
@@ -131,12 +143,14 @@ func TestUpdateErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockRepository{}
-			handler := UpdateHandler{repo: mock}
+			service := MetricService{repo: mock}
 			req := httptest.NewRequest(tt.method, tt.url, nil)
 
+			r := chi.NewRouter()
+			r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 			req.Header.Set("Content-Type", tt.contentType)
 			w := httptest.NewRecorder()
-			handler.Update(w, req)
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.code {
 				t.Errorf("expected status %d, got %d", w.Code, tt.code)

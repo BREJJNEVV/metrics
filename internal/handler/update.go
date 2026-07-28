@@ -39,29 +39,11 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !strings.HasPrefix(r.Header.Get("Content-Type"), "text/plain") {
+	ct := r.Header.Get("Content-Type")
+	if ct != "" && !strings.HasPrefix(ct, "text/plain") {
 		http.Error(w, "wrong Content-Type", http.StatusBadRequest)
 		return
 	}
-	// if r.Header.Get("Content-Type") != "text/plain" {
-	// 	http.Error(w, "wrong Content-Type", http.StatusBadRequest)
-	// 	return
-	// }
-
-	// http://<АДРЕС_СЕРВЕРА>/update/<ТИП_МЕТРИКИ>/<ИМЯ_МЕТРИКИ>/<ЗНАЧЕНИЕ_МЕТРИКИ>
-	// prefix := "/update/"
-	// haspref := strings.HasPrefix(r.URL.Path, prefix)
-	// if !haspref {
-	// 	http.Error(w, "Not found", http.StatusNotFound)
-	// 	return
-	// }
-
-	// trimmed := strings.TrimPrefix(r.URL.Path, prefix)
-	// parts := strings.Split(trimmed, "/")
-	// if len(parts) != 3 {
-	// 	http.Error(w, "Not found", http.StatusNotFound)
-	// 	return
-	// }
 
 	request := metricRequest{
 		typ:   chi.URLParam(r, "type"),

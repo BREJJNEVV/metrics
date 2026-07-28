@@ -3,6 +3,7 @@ package handler
 import (
 	"log"
 	"strconv"
+	"strings"
 
 	"net/http"
 
@@ -38,11 +39,14 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	if r.Header.Get("Content-Type") != "text/plain" {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "text/plain") {
 		http.Error(w, "wrong Content-Type", http.StatusBadRequest)
 		return
 	}
+	// if r.Header.Get("Content-Type") != "text/plain" {
+	// 	http.Error(w, "wrong Content-Type", http.StatusBadRequest)
+	// 	return
+	// }
 
 	// http://<АДРЕС_СЕРВЕРА>/update/<ТИП_МЕТРИКИ>/<ИМЯ_МЕТРИКИ>/<ЗНАЧЕНИЕ_МЕТРИКИ>
 	// prefix := "/update/"

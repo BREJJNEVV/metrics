@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 
@@ -8,7 +9,14 @@ import (
 	"github.com/go-chi/chi"
 )
 
+type flags struct {
+	address string
+}
+
 func main() {
+
+	fl := setFlags()
+
 	r := chi.NewRouter()
 
 	//GET http://<АДРЕС_СЕРВЕРА>/value/<ТИП_МЕТРИКИ>/<ИМЯ_МЕТРИКИ>
@@ -23,8 +31,17 @@ func main() {
 	})
 	srv := http.Server{
 		Handler: r,
-		Addr:    ":8080",
+		Addr:    fl.address,
 	}
-	log.Println("Server started at :8080")
+	log.Printf("Server started at %s", fl.address)
 	log.Fatal(srv.ListenAndServe())
+}
+
+func setFlags() flags {
+	address := flag.String("a", "localhost:8080", "endpoint address")
+	flag.Parse()
+	fl := flags{
+		address: *address,
+	}
+	return fl
 }

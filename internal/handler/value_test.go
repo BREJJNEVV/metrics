@@ -8,8 +8,6 @@ import (
 	"github.com/go-chi/chi"
 )
 
-// теперь только 2 сценария - так как для двух типов метрики логика похожа?
-
 func TestGetValue(t *testing.T) {
 	tests := []struct {
 		name        string

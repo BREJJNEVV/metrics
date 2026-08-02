@@ -61,6 +61,7 @@ func TestCollect(t *testing.T) {
 	v2, ok := mw.counters["PollCount"]
 	if !ok {
 		t.Error("PollCount not found in counters")
+		return
 	}
 	if v2 != 1 {
 		t.Errorf("PollCount has unexpected value: %v", v2)

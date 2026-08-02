@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/agent"
@@ -17,35 +17,29 @@ type flags struct {
 }
 
 func main() {
-
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	fl := setFlags()
 
 	client := &http.Client{}
 	metricStorage := agent.CreateMetricStorage()
 	baseURL := fmt.Sprintf("http://%s", fl.address)
 
-	reportStart := false
-	var mu sync.Mutex
 	go func() {
 		for {
 			time.Sleep(time.Duration(fl.reportInterval) * time.Second)
-			mu.Lock()
-			reportStart = true
-			mu.Unlock()
+			agent.Send(metricStorage, client, baseURL)
+			metricStorage.ResetCounter("PollCount")
 		}
 	}()
 
-	for {
-		agent.Collect(metricStorage)
-		time.Sleep(time.Duration(fl.pollInterval) * time.Second)
-		mu.Lock()
-		rst := reportStart
-		reportStart = false
-		mu.Unlock()
-		if rst == true {
-			agent.Send(metricStorage, client, baseURL)
+	go func() {
+		for {
+			time.Sleep(time.Duration(fl.pollInterval) * time.Second)
+			agent.Collect(metricStorage)
 		}
-	}
+	}()
+
+	select {}
 
 }
 

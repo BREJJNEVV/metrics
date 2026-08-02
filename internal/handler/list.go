@@ -1,15 +1,12 @@
 package handler
 
 import (
+	"html/template"
+	"log"
 	"net/http"
-	"text/template"
 )
 
 func (ms *MetricService) ListMetrics(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	data := struct {
@@ -22,14 +19,12 @@ func (ms *MetricService) ListMetrics(w http.ResponseWriter, r *http.Request) {
 
 	err := tmpl.Execute(w, data)
 	if err != nil {
-		http.Error(w, "Internal error", http.StatusInternalServerError)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		log.Printf("error: %v", err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
-
 }
 
-// metrics - имя шаблона
 var tmpl = template.Must(template.New("metrics").Parse(` 
 <html>
 <body>

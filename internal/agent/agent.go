@@ -3,9 +3,11 @@ package agent
 import (
 	"fmt"
 	"log"
+	"maps"
 	"math/rand"
 	"net/http"
 	"runtime"
+	"sync"
 )
 
 type MetricsWriter interface {
@@ -21,10 +23,10 @@ type MetricsReader interface {
 type MetricsStorage struct {
 	counter map[string]int64
 	gauge   map[string]float64
+	mu      sync.Mutex
 }
 
 func Collect(mw MetricsWriter) {
-	log.Print("Collecting metrics")
 	allMetrics := runtime.MemStats{}
 	runtime.ReadMemStats(&allMetrics)
 
@@ -61,7 +63,6 @@ func Collect(mw MetricsWriter) {
 }
 
 func Send(mr MetricsReader, client *http.Client, baseURL string) {
-	log.Print("Sending metrics")
 	for name, value := range mr.Counters() {
 		url := fmt.Sprintf("%s/update/counter/%s/%d", baseURL, name, value)
 		resp, err := client.Post(url, "text/plain", nil)
@@ -98,17 +99,35 @@ func CreateMetricStorage() *MetricsStorage {
 }
 
 func (ms *MetricsStorage) SetGauge(name string, value float64) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 	ms.gauge[name] = value
 }
 
 func (ms *MetricsStorage) AddCounter(name string, value int64) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 	ms.counter[name] += value
 }
 
 func (ms *MetricsStorage) Gauges() map[string]float64 {
-	return ms.gauge
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	copyMap := make(map[string]float64, len(ms.gauge))
+	maps.Copy(copyMap, ms.gauge)
+	return copyMap
 }
 
 func (ms *MetricsStorage) Counters() map[string]int64 {
-	return ms.counter
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	copyMap := make(map[string]int64, len(ms.counter))
+	maps.Copy(copyMap, ms.counter)
+	return copyMap
+}
+
+func (ms *MetricsStorage) ResetCounter(name string) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+	ms.counter[name] = 0
 }

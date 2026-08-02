@@ -14,12 +14,11 @@ type flags struct {
 }
 
 func main() {
-
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	fl := setFlags()
 
 	r := chi.NewRouter()
 
-	//GET http://<АДРЕС_СЕРВЕРА>/value/<ТИП_МЕТРИКИ>/<ИМЯ_МЕТРИКИ>
 	service := handler.CreateMetricService()
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Get("/", service.ListMetrics)

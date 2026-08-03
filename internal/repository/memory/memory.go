@@ -20,15 +20,15 @@ func Create() *MemStorage {
 
 func (ms *MemStorage) Set(name string, value float64) error {
 	ms.mu.Lock()
+	defer ms.mu.Unlock()
 	ms.gauge[name] = value
-	ms.mu.Unlock()
 	return nil
 }
 
 func (ms *MemStorage) Add(name string, value int64) error {
 	ms.mu.Lock()
+	defer ms.mu.Unlock()
 	ms.counter[name] += value
-	ms.mu.Unlock()
 	return nil
 }
 

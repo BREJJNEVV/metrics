@@ -8,16 +8,18 @@ import (
 	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/agent"
+	"github.com/caarlos0/env/v6"
 )
 
 type flags struct {
-	address        string
-	reportInterval int
-	pollInterval   int
+	address        string `env:"ADDRESS"`
+	reportInterval int    `env:"REPORT_INTERVAL"`
+	pollInterval   int    `env:"POLL_INTERVAL"`
 }
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	fl := setFlags()
 
 	client := &http.Client{}
@@ -44,14 +46,22 @@ func main() {
 }
 
 func setFlags() flags {
-	address := flag.String("a", "localhost:8080", "endpoint address")
-	reportInterval := flag.Int("r", 10, "report interval")
-	pollInterval := flag.Int("p", 2, "poll interval")
-	flag.Parse()
-	fl := flags{
-		address:        *address,
-		reportInterval: *reportInterval,
-		pollInterval:   *pollInterval,
+	fl := flags{}
+	err := env.Parse(&fl)
+	if err != nil {
+		log.Fatal(err)
 	}
+	if fl.address == "" {
+		fl.address = *flag.String("a", "localhost:8080", "endpoint address")
+	}
+	if fl.reportInterval == 0 {
+		fl.reportInterval = *flag.Int("r", 10, "report interval")
+	}
+	if fl.pollInterval == 0 {
+		fl.pollInterval = *flag.Int("p", 2, "poll interval")
+	}
+
+	flag.Parse()
+
 	return fl
 }

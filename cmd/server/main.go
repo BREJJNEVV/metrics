@@ -6,11 +6,12 @@ import (
 	"net/http"
 
 	"github.com/BREJJNEVV/metrics/internal/handler"
+	"github.com/caarlos0/env/v6"
 	"github.com/go-chi/chi"
 )
 
 type flags struct {
-	address string
+	address string `env:"ADDRESS"`
 }
 
 func main() {
@@ -28,6 +29,7 @@ func main() {
 			r.Get("/{name:.*}", service.GetValue)
 		})
 	})
+
 	srv := http.Server{
 		Handler: r,
 		Addr:    fl.address,
@@ -39,8 +41,15 @@ func main() {
 func setFlags() flags {
 	address := flag.String("a", "localhost:8080", "endpoint address")
 	flag.Parse()
-	fl := flags{
-		address: *address,
+
+	var fl flags
+	err := env.Parse(&fl)
+	if err != nil {
+		log.Fatal(err)
 	}
+	if fl.address == "" {
+		fl.address = *address
+	}
+
 	return fl
 }

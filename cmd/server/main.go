@@ -11,7 +11,7 @@ import (
 )
 
 type flags struct {
-	address string `env:"ADDRESS"`
+	Address string `env:"ADDRESS"`
 }
 
 func main() {
@@ -32,9 +32,9 @@ func main() {
 
 	srv := http.Server{
 		Handler: r,
-		Addr:    fl.address,
+		Addr:    fl.Address,
 	}
-	log.Printf("Server started at %s", fl.address)
+	log.Printf("Server started at %s", fl.Address)
 	log.Fatal(srv.ListenAndServe())
 }
 
@@ -47,8 +47,8 @@ func setFlags() flags {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if fl.address == "" {
-		fl.address = *address
+	if fl.Address == "" {
+		fl.Address = *address
 	}
 
 	return fl

@@ -8,6 +8,7 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/handler"
 	"github.com/caarlos0/env/v6"
 	"github.com/go-chi/chi"
+	"go.uber.org/zap"
 )
 
 type flags struct {
@@ -15,10 +16,18 @@ type flags struct {
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	fl := setFlags()
 
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+
+	defer logger.Sync()
+
 	r := chi.NewRouter()
+	r.Use(handler.WithLogging(logger))
 
 	service := handler.CreateMetricService()
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
@@ -34,7 +43,7 @@ func main() {
 		Handler: r,
 		Addr:    fl.Address,
 	}
-	log.Printf("Server started at %s", fl.Address)
+	logger.Info("Server started", zap.String("address", fl.Address))
 	log.Fatal(srv.ListenAndServe())
 }
 

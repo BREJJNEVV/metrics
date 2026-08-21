@@ -29,13 +29,13 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(handler.WithLogging(logger))
+	r.Use(middleware.RedirectSlashes)
 
 	service := handler.CreateMetricService()
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Post("/update", service.UpdateJSON)
 	r.Get("/", service.ListMetrics)
 
-	r.Use(middleware.RedirectSlashes)
 	r.Route("/value", func(r chi.Router) {
 		r.Route("/{type:.*}", func(r chi.Router) {
 			r.Get("/{name:.*}", service.GetValue)

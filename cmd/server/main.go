@@ -8,6 +8,7 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/handler"
 	"github.com/caarlos0/env/v6"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"go.uber.org/zap"
 )
 
@@ -34,6 +35,7 @@ func main() {
 	r.Post("/update", service.UpdateJSON)
 	r.Get("/", service.ListMetrics)
 
+	r.Use(middleware.RedirectSlashes)
 	r.Route("/value", func(r chi.Router) {
 		r.Route("/{type:.*}", func(r chi.Router) {
 			r.Get("/{name:.*}", service.GetValue)

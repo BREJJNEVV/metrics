@@ -8,7 +8,6 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/handler"
 	"github.com/caarlos0/env/v6"
 	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
 	"go.uber.org/zap"
 )
 
@@ -29,11 +28,11 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(handler.WithLogging(logger))
-	r.Use(middleware.RedirectSlashes)
 
 	service := handler.CreateMetricService()
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Post("/update", service.UpdateJSON)
+	r.Post("/update/", service.UpdateJSON)
 	r.Get("/", service.ListMetrics)
 
 	r.Route("/value", func(r chi.Router) {
@@ -41,7 +40,8 @@ func main() {
 			r.Get("/{name:.*}", service.GetValue)
 		})
 	})
-	r.Get("/value", service.GetValueJSON)
+	r.Post("/value", service.GetValueJSON)
+	r.Post("/value/", service.GetValueJSON)
 
 	srv := http.Server{
 		Handler: r,

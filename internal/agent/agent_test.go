@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/BREJJNEVV/metrics/internal/model"
 )
 
 type mockWriter struct {
@@ -73,6 +77,7 @@ type requestLog struct {
 	Method      string
 	Path        string
 	ContentType string
+	Body        []byte
 }
 
 func TestSend(t *testing.T) {
@@ -87,11 +92,12 @@ func TestSend(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-
+			body, _ := io.ReadAll(r.Body)
 			requests = append(requests, requestLog{
 				Method:      r.Method,
 				Path:        r.URL.Path,
 				ContentType: r.Header.Get("Content-Type"),
+				Body:        body,
 			})
 			w.WriteHeader(http.StatusOK)
 		},
@@ -102,24 +108,43 @@ func TestSend(t *testing.T) {
 	Send(mr, client, server.URL)
 
 	if len(requests) != 2 {
-		t.Fatal("requests has not be send")
+		t.Fatalf("expected 2 requests, got %d", len(requests))
 	}
 
-	expectedResponse := map[string]bool{
-		"/update/counter/PollCount/10": false,
-		"/update/gauge/Alloc/123.45":   false,
-	}
+	for _, req := range requests {
+		if req.Method != http.MethodPost {
+			t.Errorf("expected POST method, got %s", req.Method)
+		}
+		if req.Path != "/update" {
+			t.Errorf("expected path /update, got %s", req.Path)
+		}
+		if req.ContentType != "application/json" {
+			t.Errorf("expected Content-Type application/json, got %s", req.ContentType)
+		}
 
-	for _, v := range requests {
-		if v.ContentType != "text/plain" {
-			t.Errorf("context is not right: %v", v.ContentType)
+		var metric model.Metrics
+		if err := json.Unmarshal(req.Body, &metric); err != nil {
+			t.Errorf("failed to unmarshal request body: %v", err)
+			continue
 		}
-		if v.Method != http.MethodPost {
-			t.Errorf("method is not post: %v", v.Method)
-		}
-		_, ok := expectedResponse[v.Path]
-		if !ok {
-			t.Fatalf("value not found: %v", v.Path)
+
+		switch metric.MType {
+		case model.Gauge:
+			if metric.ID != "Alloc" {
+				t.Errorf("expected gauge id Alloc, got %s", metric.ID)
+			}
+			if metric.Value == nil || *metric.Value != 123.45 {
+				t.Errorf("expected gauge value 123.45, got %v", metric.Value)
+			}
+		case model.Counter:
+			if metric.ID != "PollCount" {
+				t.Errorf("expected counter id PollCount, got %s", metric.ID)
+			}
+			if metric.Delta == nil || *metric.Delta != 10 {
+				t.Errorf("expected counter delta 10, got %v", metric.Delta)
+			}
+		default:
+			t.Errorf("unexpected metric type: %s", metric.MType)
 		}
 	}
 }

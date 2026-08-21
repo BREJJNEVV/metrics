@@ -7,7 +7,7 @@ import (
 
 	"net/http"
 
-	models "github.com/BREJJNEVV/metrics/internal/model"
+	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 	"github.com/go-chi/chi"
 )
@@ -50,7 +50,7 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch request.typ {
-	case models.Gauge:
+	case model.Gauge:
 		fGauge, err := strconv.ParseFloat(request.value, 64)
 		if err != nil {
 			http.Error(w, "status bad request", http.StatusBadRequest)
@@ -62,7 +62,7 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 			log.Printf("request type: %s, request name: %s, error: %v. ", request.typ, request.name, err)
 			return
 		}
-	case models.Counter:
+	case model.Counter:
 		icounter, err := strconv.ParseInt(request.value, 10, 64)
 		if err != nil {
 			http.Error(w, "status bad request", http.StatusBadRequest)

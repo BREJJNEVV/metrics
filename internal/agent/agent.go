@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"maps"
@@ -8,6 +10,8 @@ import (
 	"net/http"
 	"runtime"
 	"sync"
+
+	"github.com/BREJJNEVV/metrics/internal/model"
 )
 
 type MetricsWriter interface {
@@ -64,8 +68,18 @@ func Collect(mw MetricsWriter) {
 
 func Send(mr MetricsReader, client *http.Client, baseURL string) {
 	for name, value := range mr.Counters() {
-		url := fmt.Sprintf("%s/update/counter/%s/%d", baseURL, name, value)
-		resp, err := client.Post(url, "text/plain", nil)
+		var metric model.Metrics
+		metric.ID = name
+		metric.MType = model.Counter
+		metric.Delta = &value
+		data, err := json.Marshal(metric)
+		if err != nil {
+			log.Printf("error sending %s: %v", name, err)
+			continue
+		}
+
+		url := fmt.Sprintf("%s/update", baseURL)
+		resp, err := client.Post(url, "application/json", bytes.NewReader(data))
 		if err != nil {
 			log.Printf("error sending %s: %v", name, err)
 			continue
@@ -77,8 +91,17 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 	}
 
 	for name, value := range mr.Gauges() {
-		url := fmt.Sprintf("%s/update/gauge/%s/%g", baseURL, name, value)
-		resp, err := client.Post(url, "text/plain", nil)
+		var metric model.Metrics
+		metric.ID = name
+		metric.MType = model.Gauge
+		metric.Value = &value
+		data, err := json.Marshal(metric)
+		if err != nil {
+			log.Printf("error sending %s: %v", name, err)
+			continue
+		}
+		url := fmt.Sprintf("%s/update", baseURL)
+		resp, err := client.Post(url, "application/json", bytes.NewReader(data))
 		if err != nil {
 			log.Printf("error sending %s: %v", name, err)
 			continue
@@ -88,7 +111,6 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 		}
 		resp.Body.Close()
 	}
-
 }
 
 func CreateMetricStorage() *MetricsStorage {

@@ -31,6 +31,7 @@ func main() {
 
 	service := handler.CreateMetricService()
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
+	r.Post("/update", service.UpdateJSON)
 	r.Get("/", service.ListMetrics)
 
 	r.Route("/value", func(r chi.Router) {
@@ -38,6 +39,7 @@ func main() {
 			r.Get("/{name:.*}", service.GetValue)
 		})
 	})
+	r.Get("/value", service.GetValueJSON)
 
 	srv := http.Server{
 		Handler: r,

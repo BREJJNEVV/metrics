@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -77,13 +78,27 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 			log.Printf("error sending %s: %v", name, err)
 			continue
 		}
-
-		url := fmt.Sprintf("%s/update", baseURL)
-		resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+		comressData, err := compress(data)
 		if err != nil {
 			log.Printf("error sending %s: %v", name, err)
 			continue
 		}
+
+		url := fmt.Sprintf("%s/update", baseURL)
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+		if err != nil {
+			log.Printf("error sending %s: %v", name, err)
+			continue
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Content-Encoding", "gzip")
+
+		resp, err := client.Do(request)
+		if err != nil {
+			log.Printf("error sending %s: %v", name, err)
+			continue
+		}
+
 		if resp.StatusCode != http.StatusOK {
 			log.Printf("statusCode is %d from %s", resp.StatusCode, name)
 		}
@@ -100,8 +115,24 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 			log.Printf("error sending %s: %v", name, err)
 			continue
 		}
+
+		comressData, err := compress(data)
+		if err != nil {
+			log.Printf("error sending %s: %v", name, err)
+			continue
+		}
+
 		url := fmt.Sprintf("%s/update", baseURL)
-		resp, err := client.Post(url, "application/json", bytes.NewReader(data))
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+		if err != nil {
+			log.Printf("error sending %s: %v", name, err)
+			continue
+		}
+
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Content-Encoding", "gzip")
+
+		resp, err := client.Do(request)
 		if err != nil {
 			log.Printf("error sending %s: %v", name, err)
 			continue
@@ -111,6 +142,25 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 		}
 		resp.Body.Close()
 	}
+}
+
+func compress(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	w, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return nil, fmt.Errorf("failed init compress writer: %v", err)
+	}
+
+	_, err = w.Write(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed write data to compress temporary buffer: %v", err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed compress data: %v", err)
+	}
+	return buf.Bytes(), nil
 }
 
 func CreateMetricStorage() *MetricsStorage {

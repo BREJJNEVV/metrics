@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"compress/gzip"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/middleware"
@@ -27,4 +29,68 @@ func WithLogging(logger *zap.Logger) func(http.Handler) http.Handler {
 		})
 	}
 
+}
+
+func GzipDecompress(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, "bad gzip", http.StatusBadRequest)
+				return
+			}
+			defer gz.Close()
+			r.Body = gz
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+type gzipResponceWriter struct {
+	http.ResponseWriter
+	gz          *gzip.Writer
+	wroteHeader bool
+}
+
+func GzipCompress(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			grw := &gzipResponceWriter{
+				ResponseWriter: w,
+			}
+			defer func() {
+				if grw.gz != nil {
+					grw.gz.Close()
+				}
+			}()
+
+			next.ServeHTTP(grw, r)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (grw *gzipResponceWriter) WriteHeader(statusCode int) {
+	if grw.wroteHeader {
+		return
+	}
+	grw.wroteHeader = true
+	ct := grw.Header().Get("Content-Type")
+	if strings.Contains(ct, "application/json") || strings.Contains(ct, "text/html") {
+		grw.gz = gzip.NewWriter(grw.ResponseWriter)
+		grw.Header().Set("Content-Encoding", "gzip")
+	}
+	grw.ResponseWriter.WriteHeader(statusCode)
+}
+func (grw *gzipResponceWriter) Write(data []byte) (int, error) {
+	if grw.wroteHeader == false {
+		grw.WriteHeader(200)
+	}
+	if grw.gz != nil {
+		return grw.gz.Write(data)
+	}
+	return grw.ResponseWriter.Write(data)
 }

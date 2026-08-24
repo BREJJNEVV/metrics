@@ -28,6 +28,8 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(handler.WithLogging(logger))
+	r.Use(handler.GzipDecompress)
+	r.Use(handler.GzipCompress)
 
 	service := handler.CreateMetricService()
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)

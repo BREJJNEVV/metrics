@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/BREJJNEVV/metrics/internal/model"
@@ -92,7 +95,22 @@ func TestSend(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
+
 			body, _ := io.ReadAll(r.Body)
+			if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+				gz, err := gzip.NewReader(bytes.NewReader(body))
+				if err != nil {
+					t.Errorf("failed to create gzip reader: %v", err)
+					return
+				}
+				defer gz.Close()
+				body, err = io.ReadAll(gz)
+				if err != nil {
+					t.Errorf("failed to decompress request body: %v", err)
+					return
+				}
+			}
+
 			requests = append(requests, requestLog{
 				Method:      r.Method,
 				Path:        r.URL.Path,

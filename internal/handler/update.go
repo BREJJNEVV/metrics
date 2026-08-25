@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/BREJJNEVV/metrics/internal/model"
-	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 	"github.com/go-chi/chi"
 )
 
@@ -83,8 +82,8 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func CreateMetricService() MetricService {
+func CreateMetricService(repo Repository) MetricService {
 	return MetricService{
-		repo: memory.Create(),
+		repo: repo,
 	}
 }

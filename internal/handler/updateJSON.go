@@ -2,15 +2,15 @@ package handler
 
 import (
 	"encoding/json"
-	"log"
 	"strings"
 
 	"net/http"
 
 	"github.com/BREJJNEVV/metrics/internal/model"
+	"go.uber.org/zap"
 )
 
-func (h *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
+func (ms *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" || !strings.HasPrefix(ct, "application/json") {
 		http.Error(w, "wrong Content-Type", http.StatusBadRequest)
@@ -35,10 +35,14 @@ func (h *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		err = h.repo.Set(request.ID, *request.Value)
+		err = ms.repo.Set(request.ID, *request.Value)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			log.Printf("request type: %s, request name: %s, error: %v. ", request.MType, request.ID, err)
+			ms.logger.Error("Update metric error",
+				zap.String("type", request.MType),
+				zap.String("name", request.ID),
+				zap.Error(err),
+			)
 			return
 		}
 	case model.Counter:
@@ -46,10 +50,14 @@ func (h *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		err = h.repo.Add(request.ID, *request.Delta)
+		err = ms.repo.Add(request.ID, *request.Delta)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			log.Printf("request type: %s, request name: %s, error: %v. ", request.MType, request.ID, err)
+			ms.logger.Error("Update metric error",
+				zap.String("type", request.MType),
+				zap.String("name", request.ID),
+				zap.Error(err),
+			)
 			return
 		}
 	default:

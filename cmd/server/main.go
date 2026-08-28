@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,33 +11,32 @@ import (
 
 	"github.com/BREJJNEVV/metrics/internal/handler"
 	"github.com/BREJJNEVV/metrics/internal/persistence"
-	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 	"github.com/go-chi/chi"
 	"go.uber.org/zap"
 )
 
 func main() {
-
-	fl := setFlagsEnv()
-
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	defer logger.Sync()
+
+	fl, err := setFlagsEnv()
+	if err != nil {
+		logger.Fatal("fatal error", zap.Error(err))
+	}
 
 	r := chi.NewRouter()
 	r.Use(handler.WithLogging(logger))
 	r.Use(handler.GzipDecompress)
 	r.Use(handler.GzipCompress)
 
-	storage := memory.Create()
-	if fl.Restore {
-		err = persistence.LoadMetrics(storage, fl.StoragePath)
-		if err != nil {
-			log.Fatal(err)
-		}
+	storage, err := persistence.NewStorage(fl.Restore, fl.StoragePath)
+	if err != nil {
+		logger.Fatal("fatal error", zap.Error(err))
 	}
+
 	var repo handler.Repository = storage
 
 	if fl.Interval > 0 {
@@ -45,14 +45,15 @@ func main() {
 				time.Sleep(time.Duration(fl.Interval * int64(time.Second)))
 				err = persistence.SaveMetrics(storage, fl.StoragePath)
 				if err != nil {
-					log.Printf("save metrics error: %v", err)
+					logger.Error("save metrics error", zap.Error(err))
+
 				}
 			}
 		}()
 	} else {
 		repo = persistence.CreateSyncSaver(storage, fl.StoragePath)
 	}
-	service := handler.CreateMetricService(repo)
+	service := handler.CreateMetricService(repo, logger)
 
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Post("/update", service.UpdateJSON)
@@ -73,7 +74,9 @@ func main() {
 	}
 
 	logger.Info("Server started", zap.String("address", fl.Address))
-	log.Fatal(srv.ListenAndServe())
+	if err := srv.ListenAndServe(); err != nil {
+		logger.Fatal("server stopped with error", zap.Error(err))
+	}
 }
 
 type flags struct {
@@ -83,7 +86,7 @@ type flags struct {
 	Restore     bool   `env:"RESTORE"`
 }
 
-func setFlagsEnv() flags {
+func setFlagsEnv() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
 	interval := flag.Int64("i", 300, "store interval")
 	storagePath := flag.String("f", "./metrics.json", "storage path")
@@ -99,7 +102,7 @@ func setFlagsEnv() flags {
 	if env := os.Getenv("STORE_INTERVAL"); env != "" {
 		v, err := strconv.ParseInt(env, 10, 64)
 		if err != nil {
-			log.Fatalf("invalid STORE_INTERVAL: %v", err)
+			return flags{}, fmt.Errorf("invalid STORE_INTERVAL: %w", err)
 		}
 		fl.Interval = v
 	} else {
@@ -113,11 +116,11 @@ func setFlagsEnv() flags {
 	if env := os.Getenv("RESTORE"); env != "" {
 		v, err := strconv.ParseBool(env)
 		if err != nil {
-			log.Fatalf("invalid RESTORE: %v", err)
+			return flags{}, fmt.Errorf("invalid STORE_INTERVAL: %w", err)
 		}
 		fl.Restore = v
 	} else {
 		fl.Restore = *restore
 	}
-	return fl
+	return fl, nil
 }

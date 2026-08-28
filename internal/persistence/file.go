@@ -9,10 +9,16 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 )
 
-// type gaugesStruct struct {
-// 	name  string
-// 	value float64
-// }
+func NewStorage(restore bool, path string) (*memory.MemStorage, error) {
+	ms := memory.Create()
+	if restore {
+		err := LoadMetrics(ms, path)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ms, nil
+}
 
 type SyncSaver struct {
 	*memory.MemStorage
@@ -43,7 +49,6 @@ func (ss *SyncSaver) Add(name string, value int64) error {
 }
 
 func SaveMetrics(m *memory.MemStorage, path string) error {
-
 	metricSlice := make([]model.Metrics, 0, len(m.Gauges())+len(m.Counters()))
 
 	for name, value := range m.Gauges() {
@@ -68,14 +73,28 @@ func SaveMetrics(m *memory.MemStorage, path string) error {
 	if err != nil {
 		return err
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	tmpPath := path + ".tmp"
+	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
-	_, err = file.Write(data)
-	if err != nil {
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
 		return err
 	}
 	return nil

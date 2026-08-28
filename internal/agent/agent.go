@@ -2,17 +2,18 @@ package agent
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"log"
+	"io"
 	"maps"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
 
+	"github.com/BREJJNEVV/metrics/internal/compress"
 	"github.com/BREJJNEVV/metrics/internal/model"
+	"go.uber.org/zap"
 )
 
 type MetricsWriter interface {
@@ -67,7 +68,7 @@ func Collect(mw MetricsWriter) {
 	mw.SetGauge("RandomValue", rand.Float64())
 }
 
-func Send(mr MetricsReader, client *http.Client, baseURL string) {
+func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
 	for name, value := range mr.Counters() {
 		var metric model.Metrics
 		metric.ID = name
@@ -75,19 +76,19 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 		metric.Delta = &value
 		data, err := json.Marshal(metric)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
-		comressData, err := compress(data)
+		comressData, err := compress.Compress(data)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 
 		url := fmt.Sprintf("%s/update", baseURL)
 		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 		request.Header.Set("Content-Type", "application/json")
@@ -95,13 +96,15 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 
 		resp, err := client.Do(request)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("statusCode is %d from %s", resp.StatusCode, name)
+			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
 		}
+
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
 
@@ -112,20 +115,20 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 		metric.Value = &value
 		data, err := json.Marshal(metric)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 
-		comressData, err := compress(data)
+		comressData, err := compress.Compress(data)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 
 		url := fmt.Sprintf("%s/update", baseURL)
 		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 
@@ -134,33 +137,16 @@ func Send(mr MetricsReader, client *http.Client, baseURL string) {
 
 		resp, err := client.Do(request)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("statusCode is %d from %s", resp.StatusCode, name)
+			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
 		}
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
-}
-
-func compress(data []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	w, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
-	if err != nil {
-		return nil, fmt.Errorf("failed init compress writer: %v", err)
-	}
-
-	_, err = w.Write(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed write data to compress temporary buffer: %v", err)
-	}
-
-	err = w.Close()
-	if err != nil {
-		return nil, fmt.Errorf("failed compress data: %v", err)
-	}
-	return buf.Bytes(), nil
 }
 
 func CreateMetricStorage() *MetricsStorage {

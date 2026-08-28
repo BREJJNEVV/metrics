@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/BREJJNEVV/metrics/internal/model"
+	"go.uber.org/zap"
 )
 
 type mockWriter struct {
@@ -122,8 +123,8 @@ func TestSend(t *testing.T) {
 	))
 
 	defer server.Close()
-
-	Send(mr, client, server.URL)
+	logger, _ := zap.NewDevelopment()
+	Send(mr, client, server.URL, logger)
 
 	if len(requests) != 2 {
 		t.Fatalf("expected 2 requests, got %d", len(requests))

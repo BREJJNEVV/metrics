@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/agent"
-	"github.com/caarlos0/env/v6"
+	"github.com/caarlos0/env/v11"
+	"go.uber.org/zap"
 )
 
 type flags struct {
@@ -18,9 +19,16 @@ type flags struct {
 }
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer logger.Sync()
 
-	fl := setFlags()
+	fl, err := setFlags()
+	if err != nil {
+		logger.Fatal("fatal error", zap.Error(err))
+	}
 	client := &http.Client{}
 	metricStorage := agent.CreateMetricStorage()
 	baseURL := fmt.Sprintf("http://%s", fl.Address)
@@ -28,7 +36,7 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(time.Duration(fl.ReportInterval) * time.Second)
-			agent.Send(metricStorage, client, baseURL)
+			agent.Send(metricStorage, client, baseURL, logger)
 			metricStorage.ResetCounter("PollCount")
 		}
 	}()
@@ -44,8 +52,7 @@ func main() {
 
 }
 
-func setFlags() flags {
-
+func setFlags() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
 	reportInterval := flag.Int("r", 10, "report interval")
 	pollInterval := flag.Int("p", 2, "poll interval")
@@ -54,7 +61,7 @@ func setFlags() flags {
 	fl := flags{}
 	err := env.Parse(&fl)
 	if err != nil {
-		log.Fatal(err)
+		return fl, err
 	}
 
 	if fl.Address == "" {
@@ -67,5 +74,5 @@ func setFlags() flags {
 		fl.PollInterval = *pollInterval
 	}
 
-	return fl
+	return fl, nil
 }

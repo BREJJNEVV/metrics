@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BREJJNEVV/metrics/internal/compress"
 	"github.com/go-chi/chi/middleware"
 	"go.uber.org/zap"
 )
@@ -34,7 +35,7 @@ func WithLogging(logger *zap.Logger) func(http.Handler) http.Handler {
 func GzipDecompress(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-			gz, err := gzip.NewReader(r.Body)
+			gz, err := compress.NewReader(r.Body)
 			if err != nil {
 				http.Error(w, "bad gzip", http.StatusBadRequest)
 				return
@@ -80,14 +81,20 @@ func (grw *gzipResponceWriter) WriteHeader(statusCode int) {
 	grw.wroteHeader = true
 	ct := grw.Header().Get("Content-Type")
 	if strings.Contains(ct, "application/json") || strings.Contains(ct, "text/html") {
-		grw.gz = gzip.NewWriter(grw.ResponseWriter)
-		grw.Header().Set("Content-Encoding", "gzip")
+		gz, err := compress.NewWriter(grw.ResponseWriter)
+		if err != nil {
+			grw.gz = nil
+		} else {
+			grw.gz = gz
+			grw.Header().Set("Content-Encoding", "gzip")
+		}
 	}
 	grw.ResponseWriter.WriteHeader(statusCode)
 }
+
 func (grw *gzipResponceWriter) Write(data []byte) (int, error) {
 	if grw.wroteHeader == false {
-		grw.WriteHeader(200)
+		grw.WriteHeader(http.StatusOK)
 	}
 	if grw.gz != nil {
 		return grw.gz.Write(data)

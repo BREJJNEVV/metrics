@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"log"
 	"strconv"
 	"strings"
 
@@ -9,6 +8,7 @@ import (
 
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/go-chi/chi"
+	"go.uber.org/zap"
 )
 
 type Repository interface {
@@ -21,7 +21,8 @@ type Repository interface {
 }
 
 type MetricService struct {
-	repo Repository
+	repo   Repository
+	logger *zap.Logger
 }
 
 type metricRequest struct {
@@ -30,7 +31,7 @@ type metricRequest struct {
 	value string
 }
 
-func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
+func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct != "" && !strings.HasPrefix(ct, "text/plain") {
 		http.Error(w, "wrong Content-Type", http.StatusBadRequest)
@@ -55,10 +56,14 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "status bad request", http.StatusBadRequest)
 			return
 		}
-		err = h.repo.Set(request.name, fGauge)
+		err = ms.repo.Set(request.name, fGauge)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			log.Printf("request type: %s, request name: %s, error: %v. ", request.typ, request.name, err)
+			ms.logger.Error("Update metric error",
+				zap.String("type", request.typ),
+				zap.String("name", request.name),
+				zap.Error(err),
+			)
 			return
 		}
 	case model.Counter:
@@ -67,10 +72,14 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "status bad request", http.StatusBadRequest)
 			return
 		}
-		err = h.repo.Add(request.name, icounter)
+		err = ms.repo.Add(request.name, icounter)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			log.Printf("request type: %s, request name: %s, error: %v. ", request.typ, request.name, err)
+			ms.logger.Error("Update metric error",
+				zap.String("type", request.typ),
+				zap.String("name", request.name),
+				zap.Error(err),
+			)
 			return
 		}
 	default:
@@ -78,12 +87,13 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 }
 
-func CreateMetricService(repo Repository) MetricService {
+func CreateMetricService(repo Repository, logger *zap.Logger) MetricService {
 	return MetricService{
-		repo: repo,
+		repo:   repo,
+		logger: logger,
 	}
 }

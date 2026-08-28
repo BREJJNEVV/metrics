@@ -2,8 +2,9 @@ package handler
 
 import (
 	"html/template"
-	"log"
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
 func (ms *MetricService) ListMetrics(w http.ResponseWriter, r *http.Request) {
@@ -20,7 +21,7 @@ func (ms *MetricService) ListMetrics(w http.ResponseWriter, r *http.Request) {
 	err := tmpl.Execute(w, data)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		log.Printf("error: %v", err)
+		ms.logger.Error("error", zap.Error(err))
 		return
 	}
 }

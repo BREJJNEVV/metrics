@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"log"
 	"strconv"
 	"strings"
 
 	"net/http"
 
-	models "github.com/BREJJNEVV/metrics/internal/model"
-	"github.com/BREJJNEVV/metrics/internal/repository/memory"
+	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/go-chi/chi"
+	"go.uber.org/zap"
 )
 
 type Repository interface {
@@ -22,7 +21,8 @@ type Repository interface {
 }
 
 type MetricService struct {
-	repo Repository
+	repo   Repository
+	logger *zap.Logger
 }
 
 type metricRequest struct {
@@ -31,7 +31,7 @@ type metricRequest struct {
 	value string
 }
 
-func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
+func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct != "" && !strings.HasPrefix(ct, "text/plain") {
 		http.Error(w, "wrong Content-Type", http.StatusBadRequest)
@@ -50,28 +50,36 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch request.typ {
-	case models.Gauge:
+	case model.Gauge:
 		fGauge, err := strconv.ParseFloat(request.value, 64)
 		if err != nil {
 			http.Error(w, "status bad request", http.StatusBadRequest)
 			return
 		}
-		err = h.repo.Set(request.name, fGauge)
+		err = ms.repo.Set(request.name, fGauge)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			log.Printf("request type: %s, request name: %s, error: %v. ", request.typ, request.name, err)
+			ms.logger.Error("Update metric error",
+				zap.String("type", request.typ),
+				zap.String("name", request.name),
+				zap.Error(err),
+			)
 			return
 		}
-	case models.Counter:
+	case model.Counter:
 		icounter, err := strconv.ParseInt(request.value, 10, 64)
 		if err != nil {
 			http.Error(w, "status bad request", http.StatusBadRequest)
 			return
 		}
-		err = h.repo.Add(request.name, icounter)
+		err = ms.repo.Add(request.name, icounter)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			log.Printf("request type: %s, request name: %s, error: %v. ", request.typ, request.name, err)
+			ms.logger.Error("Update metric error",
+				zap.String("type", request.typ),
+				zap.String("name", request.name),
+				zap.Error(err),
+			)
 			return
 		}
 	default:
@@ -79,11 +87,13 @@ func (h *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 }
 
-func CreateMetricService() MetricService {
+func CreateMetricService(repo Repository, logger *zap.Logger) MetricService {
 	return MetricService{
-		repo: memory.Create(),
+		repo:   repo,
+		logger: logger,
 	}
 }

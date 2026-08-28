@@ -1,13 +1,19 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"log"
+	"io"
 	"maps"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
+
+	"github.com/BREJJNEVV/metrics/internal/compress"
+	"github.com/BREJJNEVV/metrics/internal/model"
+	"go.uber.org/zap"
 )
 
 type MetricsWriter interface {
@@ -62,33 +68,85 @@ func Collect(mw MetricsWriter) {
 	mw.SetGauge("RandomValue", rand.Float64())
 }
 
-func Send(mr MetricsReader, client *http.Client, baseURL string) {
+func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
 	for name, value := range mr.Counters() {
-		url := fmt.Sprintf("%s/update/counter/%s/%d", baseURL, name, value)
-		resp, err := client.Post(url, "text/plain", nil)
+		var metric model.Metrics
+		metric.ID = name
+		metric.MType = model.Counter
+		metric.Delta = &value
+		data, err := json.Marshal(metric)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("statusCode is %d from %s", resp.StatusCode, name)
+		comressData, err := compress.Compress(data)
+		if err != nil {
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
+			continue
 		}
+
+		url := fmt.Sprintf("%s/update", baseURL)
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+		if err != nil {
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
+			continue
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Content-Encoding", "gzip")
+
+		resp, err := client.Do(request)
+		if err != nil {
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
+		}
+
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
 
 	for name, value := range mr.Gauges() {
-		url := fmt.Sprintf("%s/update/gauge/%s/%g", baseURL, name, value)
-		resp, err := client.Post(url, "text/plain", nil)
+		var metric model.Metrics
+		metric.ID = name
+		metric.MType = model.Gauge
+		metric.Value = &value
+		data, err := json.Marshal(metric)
 		if err != nil {
-			log.Printf("error sending %s: %v", name, err)
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
+			continue
+		}
+
+		comressData, err := compress.Compress(data)
+		if err != nil {
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
+			continue
+		}
+
+		url := fmt.Sprintf("%s/update", baseURL)
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+		if err != nil {
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
+			continue
+		}
+
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Content-Encoding", "gzip")
+
+		resp, err := client.Do(request)
+		if err != nil {
+
+			logger.Error("error sending", zap.String("name", name), zap.Error(err))
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("statusCode is %d from %s", resp.StatusCode, name)
+			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
 		}
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 	}
-
 }
 
 func CreateMetricStorage() *MetricsStorage {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	models "github.com/BREJJNEVV/metrics/internal/model"
+	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/go-chi/chi"
 )
 
@@ -15,7 +15,7 @@ func (ms *MetricService) GetValue(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
 	switch typ {
-	case models.Gauge:
+	case model.Gauge:
 		val, found := ms.repo.GetGauge(name)
 		if !found {
 			http.Error(w, "metric not found", http.StatusNotFound)
@@ -24,7 +24,7 @@ func (ms *MetricService) GetValue(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "%g", val)
 
-	case models.Counter:
+	case model.Counter:
 		val, found := ms.repo.GetCounter(name)
 		if !found {
 			http.Error(w, "metric not found", http.StatusNotFound)

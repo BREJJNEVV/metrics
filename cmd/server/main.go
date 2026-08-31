@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +14,8 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/persistence"
 	"github.com/go-chi/chi"
 	"go.uber.org/zap"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
@@ -55,11 +58,22 @@ func main() {
 	}
 	service := handler.CreateMetricService(repo, logger)
 
+	db, err := sql.Open("pgx", fl.dbDSN)
+	if err != nil {
+		logger.Fatal("DB init error", zap.Error(err))
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		logger.Warn("db connetion failed", zap.Error(err))
+	}
+
+	healthHandler := handler.CreateHealthHandler(db, logger)
+
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Post("/update", service.UpdateJSON)
 	r.Post("/update/", service.UpdateJSON)
 	r.Get("/", service.ListMetrics)
-
+	r.Get("/ping", healthHandler.Ping)
 	r.Route("/value", func(r chi.Router) {
 		r.Route("/{type:.*}", func(r chi.Router) {
 			r.Get("/{name:.*}", service.GetValue)
@@ -84,6 +98,7 @@ type flags struct {
 	Interval    int64  `env:"STORE_INTERVAL"`
 	StoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore     bool   `env:"RESTORE"`
+	dbDSN       string `env:"DATABASE_DSN"`
 }
 
 func setFlagsEnv() (flags, error) {
@@ -91,6 +106,9 @@ func setFlagsEnv() (flags, error) {
 	interval := flag.Int64("i", 300, "store interval")
 	storagePath := flag.String("f", "./metrics.json", "storage path")
 	restore := flag.Bool("r", false, "restore data or not")
+	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
+		`localhost`, `metrics_app`, `AppPassword123`, `metrics`)
+	dbDSN := flag.String("d", ps, "address db connection")
 	flag.Parse()
 
 	var fl flags
@@ -121,6 +139,11 @@ func setFlagsEnv() (flags, error) {
 		fl.Restore = v
 	} else {
 		fl.Restore = *restore
+	}
+	if env := os.Getenv("DATABASE_DSN"); env != "" {
+		fl.dbDSN = env
+	} else {
+		fl.dbDSN = *dbDSN
 	}
 	return fl, nil
 }

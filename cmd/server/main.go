@@ -12,9 +12,14 @@ import (
 
 	"github.com/BREJJNEVV/metrics/internal/handler"
 	"github.com/BREJJNEVV/metrics/internal/persistence"
+	"github.com/BREJJNEVV/metrics/internal/repository/memory"
+	"github.com/BREJJNEVV/metrics/internal/repository/postgres"
 	"github.com/go-chi/chi"
 	"go.uber.org/zap"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -30,50 +35,66 @@ func main() {
 		logger.Fatal("fatal error", zap.Error(err))
 	}
 
+	var repo handler.Repository
+	var db *sql.DB
+
+	if fl.dbDSN != "" {
+		err = runMigrations(fl.dbDSN)
+		if err != nil {
+			logger.Fatal("failed to run migrations", zap.Error(err))
+		}
+
+		db, err = sql.Open("pgx", fl.dbDSN)
+		if err != nil {
+			logger.Fatal("fatal error", zap.Error(err))
+		}
+		defer db.Close()
+
+		repo = postgres.New(db, logger)
+
+	} else if fl.StoragePath != "" {
+		storage, err := persistence.NewStorage(fl.Restore, fl.StoragePath)
+		if err != nil {
+			logger.Fatal("fatal error", zap.Error(err))
+		}
+		if fl.Interval > 0 {
+			repo = storage
+			go func() {
+				for {
+					time.Sleep(time.Duration(fl.Interval * int64(time.Second)))
+					err = persistence.SaveMetrics(storage, fl.StoragePath)
+					if err != nil {
+						logger.Error("save metrics error", zap.Error(err))
+					}
+				}
+			}()
+		} else {
+			repo = persistence.CreateSyncSaver(storage, fl.StoragePath)
+		}
+	} else {
+		repo = memory.Create()
+	}
+
+	service := handler.CreateMetricService(repo, logger)
+
 	r := chi.NewRouter()
 	r.Use(handler.WithLogging(logger))
 	r.Use(handler.GzipDecompress)
 	r.Use(handler.GzipCompress)
 
-	storage, err := persistence.NewStorage(fl.Restore, fl.StoragePath)
-	if err != nil {
-		logger.Fatal("fatal error", zap.Error(err))
-	}
-
-	var repo handler.Repository = storage
-
-	if fl.Interval > 0 {
-		go func() {
-			for {
-				time.Sleep(time.Duration(fl.Interval * int64(time.Second)))
-				err = persistence.SaveMetrics(storage, fl.StoragePath)
-				if err != nil {
-					logger.Error("save metrics error", zap.Error(err))
-
-				}
-			}
-		}()
-	} else {
-		repo = persistence.CreateSyncSaver(storage, fl.StoragePath)
-	}
-	service := handler.CreateMetricService(repo, logger)
-
-	db, err := sql.Open("pgx", fl.dbDSN)
-	if err != nil {
-		logger.Fatal("DB init error", zap.Error(err))
-	}
 	defer db.Close()
-	if err := db.Ping(); err != nil {
-		logger.Warn("db connetion failed", zap.Error(err))
+	if db != nil {
+		if err := db.Ping(); err != nil {
+			logger.Warn("db connetion failed", zap.Error(err))
+		}
+		healthHandler := handler.CreateHealthHandler(db, logger)
+		r.Get("/ping", healthHandler.Ping)
 	}
-
-	healthHandler := handler.CreateHealthHandler(db, logger)
-
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Post("/update", service.UpdateJSON)
 	r.Post("/update/", service.UpdateJSON)
 	r.Get("/", service.ListMetrics)
-	r.Get("/ping", healthHandler.Ping)
+
 	r.Route("/value", func(r chi.Router) {
 		r.Route("/{type:.*}", func(r chi.Router) {
 			r.Get("/{name:.*}", service.GetValue)
@@ -106,9 +127,7 @@ func setFlagsEnv() (flags, error) {
 	interval := flag.Int64("i", 300, "store interval")
 	storagePath := flag.String("f", "./metrics.json", "storage path")
 	restore := flag.Bool("r", false, "restore data or not")
-	ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
-		`localhost`, `metrics_app`, `AppPassword123`, `metrics`)
-	dbDSN := flag.String("d", ps, "address db connection")
+	dbDSN := flag.String("d", "", "address db connection")
 	flag.Parse()
 
 	var fl flags
@@ -140,10 +159,28 @@ func setFlagsEnv() (flags, error) {
 	} else {
 		fl.Restore = *restore
 	}
-	if env := os.Getenv("DATABASE_DSN"); env != "" {
+	// ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
+	// 	`localhost`, `metrics_app`, `AppPassword123`, `metrics`)
+	env := os.Getenv("DATABASE_DSN")
+
+	if env != "" {
 		fl.dbDSN = env
-	} else {
+	} else if *dbDSN != "" {
 		fl.dbDSN = *dbDSN
+	} else {
+		fl.dbDSN = ""
 	}
 	return fl, nil
+}
+
+func runMigrations(dsn string) error {
+	m, err := migrate.New("file://migrations", dsn)
+	if err != nil {
+		return err
+	}
+	defer m.Close()
+	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
 }

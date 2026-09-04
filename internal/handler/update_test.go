@@ -163,16 +163,16 @@ func TestUpdateErrors(t *testing.T) {
 	}
 }
 
-func (mh *mockRepository) Set(name string, value float64) error {
-	mh.SetCall = true
-	mh.SetName = name
-	mh.SetValue = value
+func (mr *mockRepository) Set(name string, value float64) error {
+	mr.SetCall = true
+	mr.SetName = name
+	mr.SetValue = value
 	return nil
 }
 
-func (mh *mockRepository) Add(name string, value int64) error {
-	mh.AddCall = true
-	mh.AddName = name
-	mh.AddValue = value
+func (mr *mockRepository) Add(name string, value int64) error {
+	mr.AddCall = true
+	mr.AddName = name
+	mr.AddValue = value
 	return nil
 }

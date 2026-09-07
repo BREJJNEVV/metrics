@@ -69,84 +69,63 @@ func Collect(mw MetricsWriter) {
 }
 
 func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
+	metricsSlice := []model.Metrics{}
+
 	for name, value := range mr.Counters() {
+		v := value
 		var metric model.Metrics
 		metric.ID = name
 		metric.MType = model.Counter
-		metric.Delta = &value
-		data, err := json.Marshal(metric)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-		comressData, err := compress.Compress(data)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-
-		url := fmt.Sprintf("%s/update", baseURL)
-		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Content-Encoding", "gzip")
-
-		resp, err := client.Do(request)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
-		}
-
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		metric.Delta = &v
+		metricsSlice = append(metricsSlice, metric)
 	}
 
 	for name, value := range mr.Gauges() {
+		v := value
 		var metric model.Metrics
 		metric.ID = name
 		metric.MType = model.Gauge
-		metric.Value = &value
-		data, err := json.Marshal(metric)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-
-		comressData, err := compress.Compress(data)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-
-		url := fmt.Sprintf("%s/update", baseURL)
-		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Content-Encoding", "gzip")
-
-		resp, err := client.Do(request)
-		if err != nil {
-
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
-		}
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		metric.Value = &v
+		metricsSlice = append(metricsSlice, metric)
 	}
+
+	if len(metricsSlice) == 0 {
+		logger.Info("No sending empty batch")
+		return
+	}
+	data, err := json.Marshal(metricsSlice)
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
+		return
+	}
+	comressData, err := compress.Compress(data)
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
+		return
+
+	}
+
+	url := fmt.Sprintf("%s/updates", baseURL)
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Encoding", "gzip")
+
+	resp, err := client.Do(request)
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Warn("unexpected status code", zap.Int("status", resp.StatusCode))
+	}
+
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
 }
 
 func CreateMetricStorage() *MetricsStorage {

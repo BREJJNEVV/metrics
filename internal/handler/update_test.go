@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/go-chi/chi"
 )
 
@@ -174,5 +175,9 @@ func (mr *mockRepository) Add(name string, value int64) error {
 	mr.AddCall = true
 	mr.AddName = name
 	mr.AddValue = value
+	return nil
+}
+
+func (m *mockRepository) UpdateBatch(metrics []model.Metrics) error {
 	return nil
 }

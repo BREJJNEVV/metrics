@@ -5,8 +5,19 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/BREJJNEVV/metrics/internal/model"
 	"go.uber.org/zap"
 )
+
+const queryInsertGauge string = `INSERT INTO gauge_metrics (name, value)
+     VALUES ($1, $2)
+     ON CONFLICT (name) DO UPDATE 
+	 SET value = EXCLUDED.value`
+
+const queryInsertCounter string = `INSERT INTO counter_metrics (name, value)
+     VALUES ($1, $2)
+     ON CONFLICT (name) DO UPDATE 
+	 SET value = counter_metrics.value + EXCLUDED.value`
 
 type PsgsRepository struct {
 	db     *sql.DB
@@ -15,10 +26,7 @@ type PsgsRepository struct {
 
 func (p *PsgsRepository) Add(name string, value int64) error {
 	_, err := p.db.ExecContext(context.Background(),
-		`INSERT INTO counter_metrics (name, value)
-     VALUES ($1, $2)
-     ON CONFLICT (name) DO UPDATE 
-	 SET value = counter_metrics.value + EXCLUDED.value`,
+		queryInsertCounter,
 		name, value,
 	)
 	if err != nil {
@@ -29,10 +37,7 @@ func (p *PsgsRepository) Add(name string, value int64) error {
 
 func (p *PsgsRepository) Set(name string, value float64) error {
 	_, err := p.db.ExecContext(context.Background(),
-		`INSERT INTO gauge_metrics (name, value)
-     VALUES ($1, $2)
-     ON CONFLICT (name) DO UPDATE 
-	 SET value = EXCLUDED.value`,
+		queryInsertGauge,
 		name, value,
 	)
 	if err != nil {
@@ -131,6 +136,37 @@ func (p *PsgsRepository) GetGauge(name string) (float64, bool) {
 	}
 
 	return value, true
+}
+
+func (p *PsgsRepository) UpdateBatch(mr []model.Metrics) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, request := range mr {
+		switch request.MType {
+		case model.Gauge:
+			_, err := tx.ExecContext(context.Background(),
+				queryInsertGauge,
+				request.ID, *request.Value,
+			)
+			if err != nil {
+				return err
+			}
+		case model.Counter:
+			_, err := tx.ExecContext(context.Background(),
+				queryInsertCounter,
+				request.ID, *request.Delta,
+			)
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.New("unknown metric type")
+		}
+	}
+	return tx.Commit()
 }
 
 func New(db *sql.DB, logger *zap.Logger) *PsgsRepository {

@@ -48,6 +48,13 @@ func (ss *SyncSaver) Add(name string, value int64) error {
 	return SaveMetrics(ss.MemStorage, ss.path)
 }
 
+func (ss *SyncSaver) UpdateBatch(mr []model.Metrics) error {
+	if err := ss.MemStorage.UpdateBatch(mr); err != nil {
+		return err
+	}
+	return nil
+}
+
 func SaveMetrics(m *memory.MemStorage, path string) error {
 	metricSlice := make([]model.Metrics, 0, len(m.Gauges())+len(m.Counters()))
 

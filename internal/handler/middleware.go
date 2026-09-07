@@ -65,11 +65,9 @@ func GzipCompress(next http.Handler) http.Handler {
 					grw.gz.Close()
 				}
 			}()
-
 			next.ServeHTTP(grw, r)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }

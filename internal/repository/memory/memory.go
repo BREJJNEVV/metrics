@@ -1,8 +1,11 @@
 package memory
 
 import (
+	"errors"
 	"maps"
 	"sync"
+
+	"github.com/BREJJNEVV/metrics/internal/model"
 )
 
 type MemStorage struct {
@@ -71,5 +74,25 @@ func (ms *MemStorage) Counters() map[string]int64 {
 	maps.Copy(newMap, ms.counter)
 
 	return newMap
+}
 
+func (ms *MemStorage) UpdateBatch(mr []model.Metrics) error {
+	var err error
+	for _, request := range mr {
+		switch request.MType {
+		case model.Gauge:
+			err = ms.Set(request.ID, *request.Value)
+			if err != nil {
+				return err
+			}
+		case model.Counter:
+			err = ms.Add(request.ID, *request.Delta)
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.New("unknown metric type")
+		}
+	}
+	return nil
 }

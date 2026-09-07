@@ -93,6 +93,8 @@ func main() {
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Post("/update", service.UpdateJSON)
 	r.Post("/update/", service.UpdateJSON)
+	r.Post("/updates", service.UpdatesJSON)
+	r.Post("/updates/", service.UpdatesJSON)
 	r.Get("/", service.ListMetrics)
 
 	r.Route("/value", func(r chi.Router) {

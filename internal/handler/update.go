@@ -18,6 +18,7 @@ type Repository interface {
 	GetCounter(name string) (int64, bool)
 	Gauges() map[string]float64
 	Counters() map[string]int64
+	UpdateBatch(mr []model.Metrics) error
 }
 
 type MetricService struct {

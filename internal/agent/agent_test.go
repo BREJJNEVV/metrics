@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -124,7 +125,8 @@ func TestSend(t *testing.T) {
 
 	defer server.Close()
 	logger, _ := zap.NewDevelopment()
-	Send(mr, client, server.URL, logger)
+	ctx := context.Background()
+	Send(ctx, mr, client, server.URL, logger)
 
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 requests, got %d", len(requests))

@@ -161,8 +161,7 @@ func setFlagsEnv() (flags, error) {
 	} else {
 		fl.Restore = *restore
 	}
-	// ps := fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable",
-	// 	`localhost`, `metrics_app`, `AppPassword123`, `metrics`)
+
 	env := os.Getenv("DATABASE_DSN")
 
 	if env != "" {

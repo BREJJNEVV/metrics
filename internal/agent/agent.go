@@ -2,17 +2,22 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"math/rand"
+	"net"
 	"net/http"
 	"runtime"
 	"sync"
+	"syscall"
 
 	"github.com/BREJJNEVV/metrics/internal/compress"
 	"github.com/BREJJNEVV/metrics/internal/model"
+	"github.com/BREJJNEVV/metrics/internal/retry"
 	"go.uber.org/zap"
 )
 
@@ -68,7 +73,7 @@ func Collect(mw MetricsWriter) {
 	mw.SetGauge("RandomValue", rand.Float64())
 }
 
-func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
+func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
 	metricsSlice := []model.Metrics{}
 
 	for name, value := range mr.Counters() {
@@ -106,16 +111,24 @@ func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Log
 	}
 
 	url := fmt.Sprintf("%s/updates", baseURL)
-	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
-	if err != nil {
-		logger.Error("error sending", zap.Error(err))
-		return
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Content-Encoding", "gzip")
+	var resp *http.Response
+	err = retry.Do(ctx, isRetriable, func() error {
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+		if err != nil {
+			logger.Warn("error sending", zap.Error(err))
+			return err
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Content-Encoding", "gzip")
+		resp, err = client.Do(request)
+		if err != nil {
+			logger.Warn("error sending", zap.Error(err))
+			return err
+		}
+		return nil
+	})
 
-	resp, err := client.Do(request)
-	if err != nil {
+	if err != nil || resp == nil {
 		logger.Error("error sending", zap.Error(err))
 		return
 	}
@@ -126,6 +139,17 @@ func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Log
 
 	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
+}
+
+func isRetriable(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	return false
 }
 
 func CreateMetricStorage() *MetricsStorage {

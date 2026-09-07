@@ -178,6 +178,6 @@ func (mr *mockRepository) Add(name string, value int64) error {
 	return nil
 }
 
-func (m *mockRepository) UpdateBatch(metrics []model.Metrics) error {
+func (mr *mockRepository) UpdateBatch(metrics []model.Metrics) error {
 	return nil
 }

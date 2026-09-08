@@ -17,7 +17,7 @@ func (hh *HealthHandler) Ping(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	start := time.Now()
 	if err := hh.db.PingContext(ctx); err != nil {
-		hh.logger.Fatal("DB ping error", zap.Error(err))
+		hh.logger.Error("DB ping error", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

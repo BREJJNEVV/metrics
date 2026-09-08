@@ -82,7 +82,6 @@ func main() {
 	r.Use(handler.GzipDecompress)
 	r.Use(handler.GzipCompress)
 
-	defer db.Close()
 	if db != nil {
 		if err := db.Ping(); err != nil {
 			logger.Warn("db connetion failed", zap.Error(err))
@@ -127,7 +126,7 @@ type flags struct {
 func setFlagsEnv() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
 	interval := flag.Int64("i", 300, "store interval")
-	storagePath := flag.String("f", "./metrics.json", "storage path")
+	storagePath := flag.String("f", "", "storage path")
 	restore := flag.Bool("r", false, "restore data or not")
 	dbDSN := flag.String("d", "", "address db connection")
 	flag.Parse()

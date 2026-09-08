@@ -122,18 +122,22 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 		resp, err = client.Do(request)
 		if err != nil {
 			if resp != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 			return err
 		}
 		return nil
 	})
-	if resp != nil {
-		defer resp.Body.Close()
+	if err != nil {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		logger.Error("error sending", zap.Error(err))
+		return
 	}
 
-	if err != nil || resp == nil {
-		logger.Error("error sending", zap.Error(err))
+	if resp == nil {
+		logger.Error("nil response")
 		return
 	}
 
@@ -141,7 +145,14 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 		logger.Warn("unexpected status code", zap.Int("status", resp.StatusCode))
 	}
 
-	_, _ = io.Copy(io.Discard, resp.Body)
+	_, copyErr := io.Copy(io.Discard, resp.Body)
+	closeErr := resp.Body.Close()
+	if copyErr != nil {
+		logger.Warn("failed to drain body", zap.Error(copyErr))
+	}
+	if closeErr != nil {
+		logger.Warn("failed to close body", zap.Error(closeErr))
+	}
 }
 
 func isRetriable(err error) bool {

@@ -96,7 +96,7 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		var queryErr error
-		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM gauges_metrics`)
+		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM gauge_metrics`)
 		if queryErr != nil {
 			if rows != nil {
 				_ = rows.Close()

@@ -51,34 +51,28 @@ func (p *PsgsRepository) Set(name string, value float64) error {
 func (p *PsgsRepository) Counters() map[string]int64 {
 	newMap := make(map[string]int64)
 	var rows *sql.Rows
+	var err error
 	ctx := context.Background()
 
-	err := retry.Do(ctx, isRetriablePG, func() error {
+	err = retry.Do(ctx, isRetriablePG, func() error {
 		var queryErr error
 		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM counter_metrics`)
 		if queryErr != nil {
-			if rows != nil {
-				rows.Close()
-			}
 			return queryErr
 		}
 		return nil
 	})
-	if rows != nil {
-		defer rows.Close()
-	}
 
 	if err != nil {
 		p.logger.Error("failed to query counters", zap.Error(err))
-		if rows != nil {
-			rows.Err()
-		}
 		return newMap
 	}
 	if rows == nil {
 		p.logger.Error("rows is nil after query counters")
 		return newMap
 	}
+	defer rows.Close()
+
 	var name string
 	var value int64
 	for rows.Next() {
@@ -97,34 +91,27 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 func (p *PsgsRepository) Gauges() map[string]float64 {
 	newMap := make(map[string]float64)
 	var rows *sql.Rows
+	var err error
 	ctx := context.Background()
 
-	err := retry.Do(ctx, isRetriablePG, func() error {
+	err = retry.Do(ctx, isRetriablePG, func() error {
 		var queryErr error
 		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM gauge_metrics`)
 		if queryErr != nil {
-			if rows != nil {
-				_ = rows.Close()
-			}
 			return queryErr
 		}
 		return nil
 	})
-	if rows != nil {
-		defer rows.Close()
-	}
 
 	if err != nil {
 		p.logger.Error("failed to query gauges", zap.Error(err))
-		if rows != nil {
-			rows.Err()
-		}
 		return newMap
 	}
 	if rows == nil {
 		p.logger.Error("rows is nil after query gauges")
 		return newMap
 	}
+	defer rows.Close()
 
 	var name string
 	var value float64

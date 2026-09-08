@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/compress"
 	"github.com/BREJJNEVV/metrics/internal/model"
@@ -103,7 +104,7 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 		logger.Error("error sending", zap.Error(err))
 		return
 	}
-	comressData, err := compress.Compress(data)
+	compressedData, err := compress.Compress(data)
 	if err != nil {
 		logger.Error("error sending", zap.Error(err))
 		return
@@ -111,29 +112,36 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 
 	url := fmt.Sprintf("%s/updates", baseURL)
 	var resp *http.Response
-	err = retry.Do(ctx, isRetriable, func() error {
-		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+
+	for attempt := range retry.Attempts {
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
 		if err != nil {
-			logger.Warn("error sending", zap.Error(err))
-			return err
+			logger.Warn("error creating request", zap.Error(err))
+			return
 		}
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Content-Encoding", "gzip")
+
 		resp, err = client.Do(request)
-		if err != nil {
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
-			return err
+		if err == nil {
+			break
 		}
-		return nil
-	})
-	if err != nil {
+
 		if resp != nil {
 			_ = resp.Body.Close()
 		}
-		logger.Error("error sending", zap.Error(err))
-		return
+
+		if !isRetriable(err) || attempt == retry.Attempts-1 {
+			logger.Error("error sending", zap.Error(err))
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			logger.Warn("context done", zap.Error(ctx.Err()))
+			return
+		case <-time.After(time.Duration(1+(retry.Delay*attempt)) * time.Second):
+		}
 	}
 
 	if resp == nil {

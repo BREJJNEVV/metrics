@@ -47,6 +47,7 @@ func (p *PsgsRepository) Set(name string, value float64) error {
 	})
 	return err
 }
+
 func (p *PsgsRepository) Counters() map[string]int64 {
 	newMap := make(map[string]int64)
 	var rows *sql.Rows
@@ -57,13 +58,12 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM counter_metrics`)
 		if queryErr != nil {
 			if rows != nil {
-				_ = rows.Close()
+				rows.Close()
 			}
 			return queryErr
 		}
 		return nil
 	})
-
 	if err != nil {
 		p.logger.Error("failed to query counters", zap.Error(err))
 		return newMap
@@ -73,6 +73,7 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 		return newMap
 	}
 
+	defer rows.Close()
 	var name string
 	var value int64
 	for rows.Next() {
@@ -82,14 +83,12 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 		}
 		newMap[name] = value
 	}
-
 	if rowsErr := rows.Err(); rowsErr != nil {
 		p.logger.Error("rows iteration error", zap.Error(rowsErr))
 	}
-	_ = rows.Close()
-
 	return newMap
 }
+
 func (p *PsgsRepository) Gauges() map[string]float64 {
 	newMap := make(map[string]float64)
 	var rows *sql.Rows
@@ -97,7 +96,7 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		var queryErr error
-		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM gauge_metrics`)
+		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM gauges_metrics`)
 		if queryErr != nil {
 			if rows != nil {
 				_ = rows.Close()
@@ -106,7 +105,6 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 		}
 		return nil
 	})
-
 	if err != nil {
 		p.logger.Error("failed to query gauges", zap.Error(err))
 		return newMap
@@ -116,6 +114,7 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 		return newMap
 	}
 
+	defer rows.Close()
 	var name string
 	var value float64
 	for rows.Next() {
@@ -125,12 +124,9 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 		}
 		newMap[name] = value
 	}
-
 	if rowsErr := rows.Err(); rowsErr != nil {
 		p.logger.Error("rows iteration error", zap.Error(rowsErr))
 	}
-	_ = rows.Close()
-
 	return newMap
 }
 
@@ -165,6 +161,7 @@ func (p *PsgsRepository) GetGauge(name string) (float64, bool) {
 	}
 	return value, true
 }
+
 func (p *PsgsRepository) UpdateBatch(mr []model.Metrics) error {
 	ctx := context.Background()
 
@@ -200,6 +197,7 @@ func (p *PsgsRepository) UpdateBatch(mr []model.Metrics) error {
 		return tx.Commit()
 	})
 }
+
 func New(db *sql.DB, logger *zap.Logger) *PsgsRepository {
 	return &PsgsRepository{db: db, logger: logger}
 }

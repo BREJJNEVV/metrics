@@ -107,7 +107,6 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 	if err != nil {
 		logger.Error("error sending", zap.Error(err))
 		return
-
 	}
 
 	url := fmt.Sprintf("%s/updates", baseURL)
@@ -122,14 +121,13 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 		request.Header.Set("Content-Encoding", "gzip")
 		resp, err = client.Do(request)
 		if err != nil {
-			logger.Warn("error sending", zap.Error(err))
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
 			return err
 		}
 		return nil
 	})
-	if resp != nil {
-		defer resp.Body.Close()
-	}
 
 	if err != nil || resp == nil {
 		logger.Error("error sending", zap.Error(err))

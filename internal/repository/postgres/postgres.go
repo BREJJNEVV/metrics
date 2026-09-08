@@ -53,10 +53,17 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 	ctx := context.Background()
 
 	err := retry.Do(ctx, isRetriablePG, func() error {
-		var err error
-		rows, err = p.db.QueryContext(ctx, `SELECT name, value FROM counter_metrics`)
-		return err
+		var queryErr error
+		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM counter_metrics`)
+		if queryErr != nil {
+			if rows != nil {
+				_ = rows.Close()
+			}
+			return queryErr
+		}
+		return nil
 	})
+
 	if err != nil {
 		p.logger.Error("failed to query counters", zap.Error(err))
 		return newMap
@@ -65,33 +72,41 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 		p.logger.Error("rows is nil after query counters")
 		return newMap
 	}
-	defer rows.Close()
 
 	var name string
 	var value int64
 	for rows.Next() {
-		if err := rows.Scan(&name, &value); err != nil {
-			p.logger.Error("failed to scan counter row", zap.Error(err))
+		if scanErr := rows.Scan(&name, &value); scanErr != nil {
+			p.logger.Error("failed to scan counter row", zap.Error(scanErr))
 			break
 		}
 		newMap[name] = value
 	}
-	if err := rows.Err(); err != nil {
-		p.logger.Error("rows iteration error", zap.Error(err))
+
+	if rowsErr := rows.Err(); rowsErr != nil {
+		p.logger.Error("rows iteration error", zap.Error(rowsErr))
 	}
+	_ = rows.Close()
+
 	return newMap
 }
-
 func (p *PsgsRepository) Gauges() map[string]float64 {
 	newMap := make(map[string]float64)
 	var rows *sql.Rows
 	ctx := context.Background()
 
 	err := retry.Do(ctx, isRetriablePG, func() error {
-		var err error
-		rows, err = p.db.QueryContext(ctx, `SELECT name, value FROM gauges_metrics`)
-		return err
+		var queryErr error
+		rows, queryErr = p.db.QueryContext(ctx, `SELECT name, value FROM gauge_metrics`)
+		if queryErr != nil {
+			if rows != nil {
+				_ = rows.Close()
+			}
+			return queryErr
+		}
+		return nil
 	})
+
 	if err != nil {
 		p.logger.Error("failed to query gauges", zap.Error(err))
 		return newMap
@@ -100,22 +115,23 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 		p.logger.Error("rows is nil after query gauges")
 		return newMap
 	}
-	defer rows.Close()
 
 	var name string
 	var value float64
 	for rows.Next() {
-		if err := rows.Scan(&name, &value); err != nil {
-			p.logger.Error("failed to scan gauge row", zap.Error(err))
+		if scanErr := rows.Scan(&name, &value); scanErr != nil {
+			p.logger.Error("failed to scan gauge row", zap.Error(scanErr))
 			break
 		}
 		newMap[name] = value
 	}
-	if err := rows.Err(); err != nil {
-		p.logger.Error("rows iteration error", zap.Error(err))
-	}
-	return newMap
 
+	if rowsErr := rows.Err(); rowsErr != nil {
+		p.logger.Error("rows iteration error", zap.Error(rowsErr))
+	}
+	_ = rows.Close()
+
+	return newMap
 }
 
 func (p *PsgsRepository) GetCounter(name string) (int64, bool) {

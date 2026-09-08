@@ -64,16 +64,21 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 		}
 		return nil
 	})
+	if rows != nil {
+		defer rows.Close()
+	}
+
 	if err != nil {
 		p.logger.Error("failed to query counters", zap.Error(err))
+		if rows != nil {
+			rows.Err()
+		}
 		return newMap
 	}
 	if rows == nil {
 		p.logger.Error("rows is nil after query counters")
 		return newMap
 	}
-
-	defer rows.Close()
 	var name string
 	var value int64
 	for rows.Next() {
@@ -105,8 +110,15 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 		}
 		return nil
 	})
+	if rows != nil {
+		defer rows.Close()
+	}
+
 	if err != nil {
 		p.logger.Error("failed to query gauges", zap.Error(err))
+		if rows != nil {
+			rows.Err()
+		}
 		return newMap
 	}
 	if rows == nil {
@@ -114,7 +126,6 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 		return newMap
 	}
 
-	defer rows.Close()
 	var name string
 	var value float64
 	for rows.Next() {

@@ -82,8 +82,8 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 		}
 		newMap[name] = value
 	}
-	if rowsErr := rows.Err(); rowsErr != nil {
-		p.logger.Error("rows iteration error", zap.Error(rowsErr))
+	if rows.Err() != nil {
+		p.logger.Error("rows iteration error", zap.Error(rows.Err()))
 	}
 	return newMap
 }

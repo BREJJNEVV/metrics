@@ -127,6 +127,9 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 		}
 		return nil
 	})
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	if err != nil || resp == nil {
 		logger.Error("error sending", zap.Error(err))
@@ -138,7 +141,6 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 	}
 
 	_, _ = io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
 }
 
 func isRetriable(err error) bool {

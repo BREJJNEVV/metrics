@@ -143,7 +143,6 @@ func TestSend(t *testing.T) {
 			t.Errorf("expected Content-Type application/json, got %s", req.ContentType)
 		}
 
-		// var metric model.Metrics
 		var mericsSlice []model.Metrics
 		if err := json.Unmarshal(req.Body, &mericsSlice); err != nil {
 			t.Errorf("failed to unmarshal request body: %v", err)

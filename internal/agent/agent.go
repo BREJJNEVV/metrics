@@ -131,6 +131,7 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 	if resp != nil {
 		defer resp.Body.Close()
 	}
+
 	if err != nil || resp == nil {
 		logger.Error("error sending", zap.Error(err))
 		return
@@ -140,7 +141,7 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 		logger.Warn("unexpected status code", zap.Int("status", resp.StatusCode))
 	}
 
-	io.Copy(io.Discard, resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 }
 
 func isRetriable(err error) bool {

@@ -52,92 +52,56 @@ func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) er
 }
 
 func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
-	newMap := make(map[string]int64)
-	var rows pgx.Rows
-	var err error
+	var result map[string]int64
+	err := retry.Do(ctx, isRetriablePG, func() error {
+		result = make(map[string]int64)
 
-	for attempt := range retry.Attempts {
-		rows, err = p.db.Query(ctx, `SELECT name, value FROM counter_metrics`)
-		if err == nil {
-			break
+		rows, err := p.db.Query(ctx, `SELECT name, value FROM counter_metrics`)
+		if err != nil {
+			return err
 		}
-		if !isRetriablePG(err) || attempt == retry.Attempts-1 {
-			p.logger.Error("failed to query counters", zap.Error(err))
-			return newMap
+		defer rows.Close()
+
+		var name string
+		var value int64
+		for rows.Next() {
+			if err := rows.Scan(&name, &value); err != nil {
+				return err
+			}
+			result[name] = value
 		}
-		select {
-		case <-ctx.Done():
-			return newMap
-		case <-time.After(time.Duration(1+(retry.Delay*attempt)) * time.Second):
-		}
+		return rows.Err()
+	})
+	if err != nil {
+		p.logger.Error("failed to query counters", zap.Error(err))
 	}
-
-	if rows == nil {
-		p.logger.Error("rows is nil after query counters")
-		return newMap
-	}
-	defer rows.Close()
-
-	var name string
-
-	var value int64
-	for rows.Next() {
-		if err := rows.Scan(&name, &value); err != nil {
-			p.logger.Error("failed to scan counter row", zap.Error(err))
-			continue
-		}
-		newMap[name] = value
-	}
-
-	if err := rows.Err(); err != nil {
-		p.logger.Error("rows iteration error", zap.Error(err))
-	}
-
-	return newMap
+	return result
 }
 
 func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
-	newMap := make(map[string]float64)
-	var rows pgx.Rows
-	var err error
-
-	for attempt := range retry.Attempts {
-		rows, err = p.db.Query(ctx, `SELECT name, value FROM gauge_metrics`)
-		if err == nil {
-			break
+	var result map[string]float64
+	err := retry.Do(ctx, isRetriablePG, func() error {
+		result = make(map[string]float64)
+		rows, err := p.db.Query(ctx, `SELECT name, value FROM gauge_metrics`)
+		if err != nil {
+			return err
 		}
-		if !isRetriablePG(err) || attempt == retry.Attempts-1 {
-			p.logger.Error("failed to query gauges", zap.Error(err))
-			return newMap
+		defer rows.Close()
+
+		var name string
+		var value float64
+		for rows.Next() {
+			if err := rows.Scan(&name, &value); err != nil {
+				return err
+			}
+			result[name] = value
 		}
-		select {
-		case <-ctx.Done():
-			return newMap
-		case <-time.After(time.Duration(1+(retry.Delay*attempt)) * time.Second):
-		}
+		return rows.Err()
+	})
+	if err != nil {
+		p.logger.Error("failed to query gauges", zap.Error(err))
 	}
-
-	if rows == nil {
-		p.logger.Error("rows is nil after query gauges")
-		return newMap
-	}
-	defer rows.Close()
-
-	var name string
-	var value float64
-	for rows.Next() {
-		if err := rows.Scan(&name, &value); err != nil {
-			p.logger.Error("failed to scan gauge row", zap.Error(err))
-			continue
-		}
-		newMap[name] = value
-	}
-
-	if err := rows.Err(); err != nil {
-		p.logger.Error("rows iteration error", zap.Error(err))
-	}
-
-	return newMap
+	return result
 }
 
 func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bool) {

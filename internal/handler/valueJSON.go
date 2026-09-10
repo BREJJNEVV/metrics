@@ -30,7 +30,7 @@ func (ms *MetricService) GetValueJSON(w http.ResponseWriter, r *http.Request) {
 
 	switch request.MType {
 	case model.Gauge:
-		val, found := ms.repo.GetGauge(request.ID)
+		val, found := ms.repo.GetGauge(r.Context(), request.ID)
 		if !found {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return
@@ -38,7 +38,7 @@ func (ms *MetricService) GetValueJSON(w http.ResponseWriter, r *http.Request) {
 		request.Value = &val
 
 	case model.Counter:
-		val, found := ms.repo.GetCounter(request.ID)
+		val, found := ms.repo.GetCounter(r.Context(), request.ID)
 		if !found {
 			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 			return

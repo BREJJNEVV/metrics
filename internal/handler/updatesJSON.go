@@ -42,7 +42,7 @@ func (ms *MetricService) UpdatesJSON(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := ms.repo.UpdateBatch(requests); err != nil {
+	if err := ms.repo.UpdateBatch(r.Context(), requests); err != nil {
 		ms.logger.Error("batch update failed",
 			zap.Error(err),
 			zap.Int("metrics_count", len(requests)),
@@ -50,4 +50,5 @@ func (ms *MetricService) UpdatesJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
 }

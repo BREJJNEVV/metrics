@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"sync"
@@ -21,21 +22,21 @@ func Create() *MemStorage {
 	}
 }
 
-func (ms *MemStorage) Set(name string, value float64) error {
+func (ms *MemStorage) Set(ctx context.Context, name string, value float64) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	ms.gauge[name] = value
 	return nil
 }
 
-func (ms *MemStorage) Add(name string, value int64) error {
+func (ms *MemStorage) Add(ctx context.Context, name string, value int64) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	ms.counter[name] += value
 	return nil
 }
 
-func (ms *MemStorage) GetGauge(name string) (float64, bool) {
+func (ms *MemStorage) GetGauge(ctx context.Context, name string) (float64, bool) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	v, ok := ms.gauge[name]
@@ -45,7 +46,7 @@ func (ms *MemStorage) GetGauge(name string) (float64, bool) {
 	return v, true
 }
 
-func (ms *MemStorage) GetCounter(name string) (int64, bool) {
+func (ms *MemStorage) GetCounter(ctx context.Context, name string) (int64, bool) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	v, ok := ms.counter[name]
@@ -55,7 +56,7 @@ func (ms *MemStorage) GetCounter(name string) (int64, bool) {
 	return v, true
 }
 
-func (ms *MemStorage) Gauges() map[string]float64 {
+func (ms *MemStorage) Gauges(ctx context.Context) map[string]float64 {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -66,7 +67,7 @@ func (ms *MemStorage) Gauges() map[string]float64 {
 
 }
 
-func (ms *MemStorage) Counters() map[string]int64 {
+func (ms *MemStorage) Counters(ctx context.Context) map[string]int64 {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -76,17 +77,17 @@ func (ms *MemStorage) Counters() map[string]int64 {
 	return newMap
 }
 
-func (ms *MemStorage) UpdateBatch(mr []model.Metrics) error {
+func (ms *MemStorage) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
 	var err error
 	for _, request := range mr {
 		switch request.MType {
 		case model.Gauge:
-			err = ms.Set(request.ID, *request.Value)
+			err = ms.Set(ctx, request.ID, *request.Value)
 			if err != nil {
 				return err
 			}
 		case model.Counter:
-			err = ms.Add(request.ID, *request.Delta)
+			err = ms.Add(ctx, request.ID, *request.Delta)
 			if err != nil {
 				return err
 			}
@@ -94,5 +95,9 @@ func (ms *MemStorage) UpdateBatch(mr []model.Metrics) error {
 			return errors.New("unknown metric type")
 		}
 	}
+	return nil
+}
+
+func (p *MemStorage) Ping(ctx context.Context) error {
 	return nil
 }

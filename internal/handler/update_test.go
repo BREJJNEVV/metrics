@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -164,20 +165,20 @@ func TestUpdateErrors(t *testing.T) {
 	}
 }
 
-func (mr *mockRepository) Set(name string, value float64) error {
+func (mr *mockRepository) Set(ctx context.Context, name string, value float64) error {
 	mr.SetCall = true
 	mr.SetName = name
 	mr.SetValue = value
 	return nil
 }
 
-func (mr *mockRepository) Add(name string, value int64) error {
+func (mr *mockRepository) Add(ctx context.Context, name string, value int64) error {
 	mr.AddCall = true
 	mr.AddName = name
 	mr.AddValue = value
 	return nil
 }
 
-func (mr *mockRepository) UpdateBatch(metrics []model.Metrics) error {
+func (mr *mockRepository) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
 	return nil
 }

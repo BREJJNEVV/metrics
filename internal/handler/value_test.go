@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -95,7 +96,7 @@ func TestGetValue(t *testing.T) {
 
 }
 
-func (mr *mockRepository) GetGauge(name string) (float64, bool) {
+func (mr *mockRepository) GetGauge(ctx context.Context, name string) (float64, bool) {
 	v, ok := mr.gauge[name]
 	if !ok {
 		return 0, false
@@ -103,7 +104,7 @@ func (mr *mockRepository) GetGauge(name string) (float64, bool) {
 	return v, true
 }
 
-func (mr *mockRepository) GetCounter(name string) (int64, bool) {
+func (mr *mockRepository) GetCounter(ctx context.Context, name string) (int64, bool) {
 	v, ok := mr.counter[name]
 	if !ok {
 		return 0, false

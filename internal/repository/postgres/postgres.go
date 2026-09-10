@@ -2,14 +2,18 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/BREJJNEVV/metrics/internal/retry"
+	"github.com/BREJJNEVV/metrics/migrations"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
@@ -24,23 +28,21 @@ const queryInsertCounter string = `INSERT INTO counter_metrics (name, value)
 	 SET value = counter_metrics.value + EXCLUDED.value`
 
 type PsgsRepository struct {
-	db     *sql.DB
+	db     *pgxpool.Pool
 	logger *zap.Logger
 }
 
-func (p *PsgsRepository) Add(name string, value int64) error {
-	ctx := context.Background()
+func (p *PsgsRepository) Add(ctx context.Context, name string, value int64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
-		_, err := p.db.ExecContext(ctx, queryInsertCounter, name, value)
+		_, err := p.db.Exec(ctx, queryInsertCounter, name, value)
 		return err
 	})
 	return err
 }
 
-func (p *PsgsRepository) Set(name string, value float64) error {
-	ctx := context.Background()
+func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
-		_, err := p.db.ExecContext(context.Background(),
+		_, err := p.db.Exec(ctx,
 			queryInsertGauge,
 			name, value,
 		)
@@ -49,14 +51,13 @@ func (p *PsgsRepository) Set(name string, value float64) error {
 	return err
 }
 
-func (p *PsgsRepository) Counters() map[string]int64 {
+func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
 	newMap := make(map[string]int64)
-	ctx := context.Background()
-	var rows *sql.Rows
+	var rows pgx.Rows
 	var err error
 
 	for attempt := range retry.Attempts {
-		rows, err = p.db.QueryContext(ctx, `SELECT name, value FROM counter_metrics`)
+		rows, err = p.db.Query(ctx, `SELECT name, value FROM counter_metrics`)
 		if err == nil {
 			break
 		}
@@ -95,14 +96,13 @@ func (p *PsgsRepository) Counters() map[string]int64 {
 	return newMap
 }
 
-func (p *PsgsRepository) Gauges() map[string]float64 {
+func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
 	newMap := make(map[string]float64)
-	ctx := context.Background()
-	var rows *sql.Rows
+	var rows pgx.Rows
 	var err error
 
 	for attempt := range retry.Attempts {
-		rows, err = p.db.QueryContext(ctx, `SELECT name, value FROM gauge_metrics`)
+		rows, err = p.db.Query(ctx, `SELECT name, value FROM gauge_metrics`)
 		if err == nil {
 			break
 		}
@@ -140,15 +140,14 @@ func (p *PsgsRepository) Gauges() map[string]float64 {
 	return newMap
 }
 
-func (p *PsgsRepository) GetCounter(name string) (int64, bool) {
+func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bool) {
 	var value int64
-	ctx := context.Background()
 	err := retry.Do(ctx, isRetriablePG, func() error {
-		row := p.db.QueryRowContext(ctx, `SELECT value FROM counter_metrics WHERE name = $1`, name)
+		row := p.db.QueryRow(ctx, `SELECT value FROM counter_metrics WHERE name = $1`, name)
 		return row.Scan(&value)
 	})
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
+		if !errors.Is(err, pgx.ErrNoRows) {
 			p.logger.Error("failed to get counter", zap.String("name", name), zap.Error(err))
 		}
 		return 0, false
@@ -156,15 +155,14 @@ func (p *PsgsRepository) GetCounter(name string) (int64, bool) {
 	return value, true
 }
 
-func (p *PsgsRepository) GetGauge(name string) (float64, bool) {
+func (p *PsgsRepository) GetGauge(ctx context.Context, name string) (float64, bool) {
 	var value float64
-	ctx := context.Background()
 	err := retry.Do(ctx, isRetriablePG, func() error {
-		row := p.db.QueryRowContext(ctx, `SELECT value FROM gauge_metrics WHERE name = $1`, name)
+		row := p.db.QueryRow(ctx, `SELECT value FROM gauge_metrics WHERE name = $1`, name)
 		return row.Scan(&value)
 	})
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
+		if !errors.Is(err, pgx.ErrNoRows) {
 			p.logger.Error("failed to get gauge", zap.String("name", name), zap.Error(err))
 		}
 		return 0, false
@@ -172,15 +170,13 @@ func (p *PsgsRepository) GetGauge(name string) (float64, bool) {
 	return value, true
 }
 
-func (p *PsgsRepository) UpdateBatch(mr []model.Metrics) error {
-	ctx := context.Background()
-
+func (p *PsgsRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
 	return retry.Do(ctx, isRetriablePG, func() error {
-		tx, err := p.db.BeginTx(ctx, nil)
+		tx, err := p.db.Begin(ctx)
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback()
+		defer tx.Rollback(ctx)
 
 		for _, m := range mr {
 			switch m.MType {
@@ -188,7 +184,7 @@ func (p *PsgsRepository) UpdateBatch(mr []model.Metrics) error {
 				if m.Value == nil {
 					return errors.New("gauge value is nil")
 				}
-				_, err = tx.ExecContext(ctx, queryInsertGauge, m.ID, *m.Value)
+				_, err = tx.Exec(ctx, queryInsertGauge, m.ID, *m.Value)
 				if err != nil {
 					return err
 				}
@@ -196,7 +192,7 @@ func (p *PsgsRepository) UpdateBatch(mr []model.Metrics) error {
 				if m.Delta == nil {
 					return errors.New("counter delta is nil")
 				}
-				_, err = tx.ExecContext(ctx, queryInsertCounter, m.ID, *m.Delta)
+				_, err = tx.Exec(ctx, queryInsertCounter, m.ID, *m.Delta)
 				if err != nil {
 					return err
 				}
@@ -204,18 +200,48 @@ func (p *PsgsRepository) UpdateBatch(mr []model.Metrics) error {
 				return errors.New("unknown metric type")
 			}
 		}
-		return tx.Commit()
+		return tx.Commit(ctx)
 	})
 }
 
-func New(db *sql.DB, logger *zap.Logger) *PsgsRepository {
-	return &PsgsRepository{db: db, logger: logger}
+func New(db *pgxpool.Pool, logger *zap.Logger, dsn string) (*PsgsRepository, error) {
+	err := runMigrations(dsn)
+	if err != nil {
+		return nil, err
+	}
+	return &PsgsRepository{db: db, logger: logger}, err
+}
+
+func runMigrations(dsn string) error {
+	src, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		return err
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", src, dsn)
+	if err != nil {
+		return err
+	}
+	defer m.Close()
+	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
 }
 
 func isRetriablePG(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return pgerrcode.IsConnectionException(pgErr.Code)
+		return pgerrcode.IsConnectionException(pgErr.Code) ||
+			pgerrcode.IsTransactionRollback(pgErr.Code)
 	}
 	return false
+}
+
+func (p *PsgsRepository) Ping(ctx context.Context) error {
+	start := time.Now()
+	if err := p.db.Ping(ctx); err != nil {
+		return err
+	}
+	p.logger.Info("db ping ok", zap.Duration("duration", time.Since(start)))
+	return nil
 }

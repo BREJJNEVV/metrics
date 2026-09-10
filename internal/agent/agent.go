@@ -14,7 +14,6 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/compress"
 	"github.com/BREJJNEVV/metrics/internal/model"
@@ -111,56 +110,82 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 	}
 
 	url := fmt.Sprintf("%s/updates", baseURL)
-	var resp *http.Response
+	//var resp *http.Response
+	var statusCode int
 
-	for attempt := range retry.Attempts {
+	err = retry.Do(ctx, isRetriable, func() error {
 		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
 		if err != nil {
-			logger.Warn("error creating request", zap.Error(err))
-			return
+			return err
 		}
+
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Content-Encoding", "gzip")
 
-		resp, err = client.Do(request)
-		if err == nil {
-			break
+		resp, err := client.Do(request)
+		if err != nil {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			return err
 		}
 
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		statusCode = resp.StatusCode
+		return nil
 
-		if !isRetriable(err) || attempt == retry.Attempts-1 {
-			logger.Error("error sending", zap.Error(err))
-			return
-		}
+	})
 
-		select {
-		case <-ctx.Done():
-			logger.Warn("context done", zap.Error(ctx.Err()))
-			return
-		case <-time.After(time.Duration(1+(retry.Delay*attempt)) * time.Second):
-		}
-	}
-
-	if resp == nil {
-		logger.Error("nil response")
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
 		return
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Warn("unexpected status code", zap.Int("status", resp.StatusCode))
+	if statusCode != http.StatusOK {
+		logger.Warn("unexpected status code", zap.Int("status", statusCode))
 	}
 
-	_, copyErr := io.Copy(io.Discard, resp.Body)
-	closeErr := resp.Body.Close()
-	if copyErr != nil {
-		logger.Warn("failed to drain body", zap.Error(copyErr))
-	}
-	if closeErr != nil {
-		logger.Warn("failed to close body", zap.Error(closeErr))
-	}
+	// _, copyErr := io.Copy(io.Discard, resp.Body)
+	// closeErr := resp.Body.Close()
+	// if copyErr != nil {
+	// 	logger.Warn("failed to drain body", zap.Error(copyErr))
+	// }
+	// if closeErr != nil {
+	// 	logger.Warn("failed to close body", zap.Error(closeErr))
+	// }
+
+	//////////
+	// for attempt := range retry.Attempts {
+	// 	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
+	// 	if err != nil {
+	// 		logger.Warn("error creating request", zap.Error(err))
+	// 		return
+	// 	}
+	// 	request.Header.Set("Content-Type", "application/json")
+	// 	request.Header.Set("Content-Encoding", "gzip")
+
+	// 	resp, err = client.Do(request)
+	// 	if err == nil {
+	// 		break
+	// 	}
+
+	// 	if resp != nil {
+	// 		_ = resp.Body.Close()
+	// 	}
+
+	// 	if !isRetriable(err) || attempt == retry.Attempts-1 {
+	// 		logger.Error("error sending", zap.Error(err))
+	// 		return
+	// 	}
+
+	// 	select {
+	// 	case <-ctx.Done():
+	// 		logger.Warn("context done", zap.Error(ctx.Err()))
+	// 		return
+	// 	case <-time.After(time.Duration(1+(retry.Delay*attempt)) * time.Second):
+	// 	}
+	// }
 }
 
 func isRetriable(err error) bool {

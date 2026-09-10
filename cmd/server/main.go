@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -17,13 +17,17 @@ import (
 	"github.com/go-chi/chi"
 	"go.uber.org/zap"
 
-	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
+
+	var repo handler.Repository
+	var pinger handler.Pinger
+	var db *pgxpool.Pool
+	ctx := context.TODO()
+
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		log.Fatal(err)
@@ -35,60 +39,59 @@ func main() {
 		logger.Fatal("fatal error", zap.Error(err))
 	}
 
-	var repo handler.Repository
-	var db *sql.DB
-
 	if fl.dbDSN != "" {
-		err = runMigrations(fl.dbDSN)
+		db, err = pgxpool.New(ctx, fl.dbDSN)
 		if err != nil {
-			logger.Fatal("failed to run migrations", zap.Error(err))
-		}
-
-		db, err = sql.Open("pgx", fl.dbDSN)
-		if err != nil {
-			logger.Fatal("fatal error", zap.Error(err))
+			logger.Fatal("failed to create pgx pool", zap.Error(err))
 		}
 		defer db.Close()
 
-		repo = postgres.New(db, logger)
+		psgsNew, err := postgres.New(db, logger, fl.dbDSN)
+		if err != nil {
+			logger.Fatal("init repository error", zap.Error(err))
+		}
+		repo = psgsNew
+		pinger = psgsNew
 
 	} else if fl.StoragePath != "" {
-		storage, err := persistence.NewStorage(fl.Restore, fl.StoragePath)
+		storage, err := persistence.NewStorage(ctx, fl.Restore, fl.StoragePath)
 		if err != nil {
 			logger.Fatal("fatal error", zap.Error(err))
 		}
 		if fl.Interval > 0 {
-			repo = storage
+			prstsNew := storage
+			repo = prstsNew
+
 			go func() {
 				for {
 					time.Sleep(time.Duration(fl.Interval * int64(time.Second)))
-					err = persistence.SaveMetrics(storage, fl.StoragePath)
+					err = persistence.SaveMetrics(ctx, storage, fl.StoragePath)
 					if err != nil {
 						logger.Error("save metrics error", zap.Error(err))
 					}
 				}
 			}()
 		} else {
-			repo = persistence.CreateSyncSaver(storage, fl.StoragePath)
+			prstsNew := persistence.CreateSyncSaver(storage, fl.StoragePath)
+			repo = prstsNew
+			pinger = prstsNew
 		}
 	} else {
-		repo = memory.Create()
+		mem := memory.Create()
+		repo = mem
+		pinger = mem
 	}
 
 	service := handler.CreateMetricService(repo, logger)
+	healthHandler := handler.NewHealthHandler(pinger, logger)
 
 	r := chi.NewRouter()
 	r.Use(handler.WithLogging(logger))
 	r.Use(handler.GzipDecompress)
 	r.Use(handler.GzipCompress)
 
-	if db != nil {
-		if err := db.Ping(); err != nil {
-			logger.Warn("db connetion failed", zap.Error(err))
-		}
-		healthHandler := handler.CreateHealthHandler(db, logger)
-		r.Get("/ping", healthHandler.Ping)
-	}
+	r.Get("/ping", healthHandler.Ping)
+
 	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 	r.Post("/update", service.UpdateJSON)
 	r.Post("/update/", service.UpdateJSON)
@@ -154,7 +157,7 @@ func setFlagsEnv() (flags, error) {
 	if env := os.Getenv("RESTORE"); env != "" {
 		v, err := strconv.ParseBool(env)
 		if err != nil {
-			return flags{}, fmt.Errorf("invalid STORE_INTERVAL: %w", err)
+			return flags{}, fmt.Errorf("invalid RESTORE: %w", err)
 		}
 		fl.Restore = v
 	} else {
@@ -171,16 +174,4 @@ func setFlagsEnv() (flags, error) {
 		fl.dbDSN = ""
 	}
 	return fl, nil
-}
-
-func runMigrations(dsn string) error {
-	m, err := migrate.New("file://migrations", dsn)
-	if err != nil {
-		return err
-	}
-	defer m.Close()
-	if err = m.Up(); err != nil && err != migrate.ErrNoChange {
-		return err
-	}
-	return nil
 }

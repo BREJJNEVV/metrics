@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,10 +64,10 @@ func TestListMetrics(t *testing.T) {
 	}
 }
 
-func (mr *mockRepository) Gauges() map[string]float64 {
+func (mr *mockRepository) Gauges(ctx context.Context) map[string]float64 {
 	return mr.gauge
 }
 
-func (mr *mockRepository) Counters() map[string]int64 {
+func (mr *mockRepository) Counters(ctx context.Context) map[string]int64 {
 	return mr.counter
 }

@@ -7,7 +7,7 @@ import (
 
 const (
 	Delay    int = 2
-	Attempts int = 3
+	Attempts int = 4
 )
 
 func Do(ctx context.Context, isRetriable func(error) bool, fn func() error) error {

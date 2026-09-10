@@ -35,7 +35,7 @@ func (ms *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		err = ms.repo.Set(request.ID, *request.Value)
+		err = ms.repo.Set(r.Context(), request.ID, *request.Value)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			ms.logger.Error("Update metric error",
@@ -50,7 +50,7 @@ func (ms *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		err = ms.repo.Add(request.ID, *request.Delta)
+		err = ms.repo.Add(r.Context(), request.ID, *request.Delta)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			ms.logger.Error("Update metric error",

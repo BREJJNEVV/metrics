@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -124,46 +125,49 @@ func TestSend(t *testing.T) {
 
 	defer server.Close()
 	logger, _ := zap.NewDevelopment()
-	Send(mr, client, server.URL, logger)
+	ctx := context.Background()
+	Send(ctx, mr, client, server.URL, logger)
 
-	if len(requests) != 2 {
-		t.Fatalf("expected 2 requests, got %d", len(requests))
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 requests, got %d", len(requests))
 	}
 
 	for _, req := range requests {
 		if req.Method != http.MethodPost {
 			t.Errorf("expected POST method, got %s", req.Method)
 		}
-		if req.Path != "/update" {
-			t.Errorf("expected path /update, got %s", req.Path)
+		if req.Path != "/updates" {
+			t.Errorf("expected path /updates, got %s", req.Path)
 		}
 		if req.ContentType != "application/json" {
 			t.Errorf("expected Content-Type application/json, got %s", req.ContentType)
 		}
 
-		var metric model.Metrics
-		if err := json.Unmarshal(req.Body, &metric); err != nil {
+		var mericsSlice []model.Metrics
+		if err := json.Unmarshal(req.Body, &mericsSlice); err != nil {
 			t.Errorf("failed to unmarshal request body: %v", err)
 			continue
 		}
-
-		switch metric.MType {
-		case model.Gauge:
-			if metric.ID != "Alloc" {
-				t.Errorf("expected gauge id Alloc, got %s", metric.ID)
+		for _, metric := range mericsSlice {
+			switch metric.MType {
+			case model.Gauge:
+				if metric.ID != "Alloc" {
+					t.Errorf("expected gauge id Alloc, got %s", metric.ID)
+				}
+				if metric.Value == nil || *metric.Value != 123.45 {
+					t.Errorf("expected gauge value 123.45, got %v", metric.Value)
+				}
+			case model.Counter:
+				if metric.ID != "PollCount" {
+					t.Errorf("expected counter id PollCount, got %s", metric.ID)
+				}
+				if metric.Delta == nil || *metric.Delta != 10 {
+					t.Errorf("expected counter delta 10, got %v", metric.Delta)
+				}
+			default:
+				t.Errorf("unexpected metric type: %s", metric.MType)
 			}
-			if metric.Value == nil || *metric.Value != 123.45 {
-				t.Errorf("expected gauge value 123.45, got %v", metric.Value)
-			}
-		case model.Counter:
-			if metric.ID != "PollCount" {
-				t.Errorf("expected counter id PollCount, got %s", metric.ID)
-			}
-			if metric.Delta == nil || *metric.Delta != 10 {
-				t.Errorf("expected counter delta 10, got %v", metric.Delta)
-			}
-		default:
-			t.Errorf("unexpected metric type: %s", metric.MType)
 		}
+
 	}
 }

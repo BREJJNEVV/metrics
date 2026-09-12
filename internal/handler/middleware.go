@@ -65,11 +65,9 @@ func GzipCompress(next http.Handler) http.Handler {
 					grw.gz.Close()
 				}
 			}()
-
 			next.ServeHTTP(grw, r)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	})
 }
@@ -93,7 +91,7 @@ func (grw *gzipResponceWriter) WriteHeader(statusCode int) {
 }
 
 func (grw *gzipResponceWriter) Write(data []byte) (int, error) {
-	if grw.wroteHeader == false {
+	if !grw.wroteHeader {
 		grw.WriteHeader(http.StatusOK)
 	}
 	if grw.gz != nil {

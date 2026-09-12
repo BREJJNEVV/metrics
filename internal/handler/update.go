@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -12,12 +13,17 @@ import (
 )
 
 type Repository interface {
-	Set(name string, value float64) error
-	Add(name string, value int64) error
-	GetGauge(name string) (float64, bool)
-	GetCounter(name string) (int64, bool)
-	Gauges() map[string]float64
-	Counters() map[string]int64
+	Set(ctx context.Context, name string, value float64) error
+	Add(ctx context.Context, name string, value int64) error
+	GetGauge(ctx context.Context, name string) (float64, bool)
+	GetCounter(ctx context.Context, name string) (int64, bool)
+	Gauges(ctx context.Context) map[string]float64
+	Counters(ctx context.Context) map[string]int64
+	UpdateBatch(ctx context.Context, mr []model.Metrics) error
+}
+
+type Pinger interface {
+	Ping(context.Context) error
 }
 
 type MetricService struct {
@@ -56,7 +62,7 @@ func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "status bad request", http.StatusBadRequest)
 			return
 		}
-		err = ms.repo.Set(request.name, fGauge)
+		err = ms.repo.Set(r.Context(), request.name, fGauge)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			ms.logger.Error("Update metric error",
@@ -72,7 +78,7 @@ func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "status bad request", http.StatusBadRequest)
 			return
 		}
-		err = ms.repo.Add(request.name, icounter)
+		err = ms.repo.Add(r.Context(), request.name, icounter)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			ms.logger.Error("Update metric error",

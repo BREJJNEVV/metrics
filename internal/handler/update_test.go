@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/go-chi/chi"
 )
 
@@ -163,16 +165,20 @@ func TestUpdateErrors(t *testing.T) {
 	}
 }
 
-func (mh *mockRepository) Set(name string, value float64) error {
-	mh.SetCall = true
-	mh.SetName = name
-	mh.SetValue = value
+func (mr *mockRepository) Set(ctx context.Context, name string, value float64) error {
+	mr.SetCall = true
+	mr.SetName = name
+	mr.SetValue = value
 	return nil
 }
 
-func (mh *mockRepository) Add(name string, value int64) error {
-	mh.AddCall = true
-	mh.AddName = name
-	mh.AddValue = value
+func (mr *mockRepository) Add(ctx context.Context, name string, value int64) error {
+	mr.AddCall = true
+	mr.AddName = name
+	mr.AddValue = value
+	return nil
+}
+
+func (mr *mockRepository) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
 	return nil
 }

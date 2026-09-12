@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -9,10 +10,10 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 )
 
-func NewStorage(restore bool, path string) (*memory.MemStorage, error) {
+func NewStorage(ctx context.Context, restore bool, path string) (*memory.MemStorage, error) {
 	ms := memory.Create()
 	if restore {
-		err := LoadMetrics(ms, path)
+		err := LoadMetrics(ctx, ms, path)
 		if err != nil {
 			return nil, err
 		}
@@ -32,26 +33,33 @@ func CreateSyncSaver(ms *memory.MemStorage, path string) *SyncSaver {
 	}
 }
 
-func (ss *SyncSaver) Set(name string, value float64) error {
-	err := ss.MemStorage.Set(name, value)
+func (ss *SyncSaver) Set(ctx context.Context, name string, value float64) error {
+	err := ss.MemStorage.Set(ctx, name, value)
 	if err != nil {
 		return err
 	}
-	return SaveMetrics(ss.MemStorage, ss.path)
+	return SaveMetrics(ctx, ss.MemStorage, ss.path)
 }
 
-func (ss *SyncSaver) Add(name string, value int64) error {
-	err := ss.MemStorage.Add(name, value)
+func (ss *SyncSaver) Add(ctx context.Context, name string, value int64) error {
+	err := ss.MemStorage.Add(ctx, name, value)
 	if err != nil {
 		return err
 	}
-	return SaveMetrics(ss.MemStorage, ss.path)
+	return SaveMetrics(ctx, ss.MemStorage, ss.path)
 }
 
-func SaveMetrics(m *memory.MemStorage, path string) error {
-	metricSlice := make([]model.Metrics, 0, len(m.Gauges())+len(m.Counters()))
+func (ss *SyncSaver) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
+	if err := ss.MemStorage.UpdateBatch(ctx, mr); err != nil {
+		return err
+	}
+	return SaveMetrics(ctx, ss.MemStorage, ss.path)
+}
 
-	for name, value := range m.Gauges() {
+func SaveMetrics(ctx context.Context, m *memory.MemStorage, path string) error {
+	metricSlice := make([]model.Metrics, 0, len(m.Gauges(ctx))+len(m.Counters(ctx)))
+
+	for name, value := range m.Gauges(ctx) {
 		v := value
 		metricSlice = append(metricSlice, model.Metrics{
 			ID:    name,
@@ -60,7 +68,7 @@ func SaveMetrics(m *memory.MemStorage, path string) error {
 		})
 	}
 
-	for name, value := range m.Counters() {
+	for name, value := range m.Counters(ctx) {
 		v := value
 		metricSlice = append(metricSlice, model.Metrics{
 			ID:    name,
@@ -100,7 +108,7 @@ func SaveMetrics(m *memory.MemStorage, path string) error {
 	return nil
 }
 
-func LoadMetrics(m *memory.MemStorage, path string) error {
+func LoadMetrics(ctx context.Context, m *memory.MemStorage, path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -122,13 +130,17 @@ func LoadMetrics(m *memory.MemStorage, path string) error {
 		switch s.MType {
 		case model.Gauge:
 			if s.Value != nil {
-				m.Set(s.ID, *s.Value)
+				m.Set(ctx, s.ID, *s.Value)
 			}
 		case model.Counter:
 			if s.Delta != nil {
-				m.Add(s.ID, *s.Delta)
+				m.Add(ctx, s.ID, *s.Delta)
 			}
 		}
 	}
+	return nil
+}
+
+func (ss *SyncSaver) Ping(ctx context.Context) error {
 	return nil
 }

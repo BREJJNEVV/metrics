@@ -16,7 +16,7 @@ func (ms *MetricService) GetValue(w http.ResponseWriter, r *http.Request) {
 
 	switch typ {
 	case model.Gauge:
-		val, found := ms.repo.GetGauge(name)
+		val, found := ms.repo.GetGauge(r.Context(), name)
 		if !found {
 			http.Error(w, "metric not found", http.StatusNotFound)
 			return
@@ -25,7 +25,7 @@ func (ms *MetricService) GetValue(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%g", val)
 
 	case model.Counter:
-		val, found := ms.repo.GetCounter(name)
+		val, found := ms.repo.GetCounter(r.Context(), name)
 		if !found {
 			http.Error(w, "metric not found", http.StatusNotFound)
 			return

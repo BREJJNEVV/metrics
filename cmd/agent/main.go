@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -33,10 +34,11 @@ func main() {
 	metricStorage := agent.CreateMetricStorage()
 	baseURL := fmt.Sprintf("http://%s", fl.Address)
 
+	ctx := context.Background()
 	go func() {
 		for {
 			time.Sleep(time.Duration(fl.ReportInterval) * time.Second)
-			agent.Send(metricStorage, client, baseURL, logger)
+			agent.Send(ctx, metricStorage, client, baseURL, logger)
 			metricStorage.ResetCounter("PollCount")
 		}
 	}()

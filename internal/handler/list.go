@@ -14,8 +14,8 @@ func (ms *MetricService) ListMetrics(w http.ResponseWriter, r *http.Request) {
 		Gauges   map[string]float64
 		Counters map[string]int64
 	}{
-		Gauges:   ms.repo.Gauges(),
-		Counters: ms.repo.Counters(),
+		Gauges:   ms.repo.Gauges(r.Context()),
+		Counters: ms.repo.Counters(r.Context()),
 	}
 
 	err := tmpl.Execute(w, data)

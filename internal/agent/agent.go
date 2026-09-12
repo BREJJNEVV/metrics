@@ -2,17 +2,22 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
 	"math/rand"
+	"net"
 	"net/http"
 	"runtime"
 	"sync"
+	"syscall"
 
 	"github.com/BREJJNEVV/metrics/internal/compress"
 	"github.com/BREJJNEVV/metrics/internal/model"
+	"github.com/BREJJNEVV/metrics/internal/retry"
 	"go.uber.org/zap"
 )
 
@@ -68,68 +73,49 @@ func Collect(mw MetricsWriter) {
 	mw.SetGauge("RandomValue", rand.Float64())
 }
 
-func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
+func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
+	metricsSlice := []model.Metrics{}
+
 	for name, value := range mr.Counters() {
+		v := value
 		var metric model.Metrics
 		metric.ID = name
 		metric.MType = model.Counter
-		metric.Delta = &value
-		data, err := json.Marshal(metric)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-		comressData, err := compress.Compress(data)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-
-		url := fmt.Sprintf("%s/update", baseURL)
-		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-		request.Header.Set("Content-Type", "application/json")
-		request.Header.Set("Content-Encoding", "gzip")
-
-		resp, err := client.Do(request)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
-		}
-
-		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		metric.Delta = &v
+		metricsSlice = append(metricsSlice, metric)
 	}
 
 	for name, value := range mr.Gauges() {
+		v := value
 		var metric model.Metrics
 		metric.ID = name
 		metric.MType = model.Gauge
-		metric.Value = &value
-		data, err := json.Marshal(metric)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
+		metric.Value = &v
+		metricsSlice = append(metricsSlice, metric)
+	}
 
-		comressData, err := compress.Compress(data)
-		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
+	if len(metricsSlice) == 0 {
+		logger.Info("No sending empty batch")
+		return
+	}
+	data, err := json.Marshal(metricsSlice)
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
+		return
+	}
+	compressedData, err := compress.Compress(data)
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
+		return
+	}
 
-		url := fmt.Sprintf("%s/update", baseURL)
-		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(comressData))
+	url := fmt.Sprintf("%s/updates", baseURL)
+	var statusCode int
+
+	err = retry.Do(ctx, isRetriable, func() error {
+		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
 		if err != nil {
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
+			return err
 		}
 
 		request.Header.Set("Content-Type", "application/json")
@@ -137,16 +123,38 @@ func Send(mr MetricsReader, client *http.Client, baseURL string, logger *zap.Log
 
 		resp, err := client.Do(request)
 		if err != nil {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			return err
+		}
 
-			logger.Error("error sending", zap.String("name", name), zap.Error(err))
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			logger.Warn("unexpected status code", zap.String("name", name), zap.Int("status", resp.StatusCode))
-		}
 		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
+		statusCode = resp.StatusCode
+		return nil
+
+	})
+
+	if err != nil {
+		logger.Error("error sending", zap.Error(err))
+		return
 	}
+
+	if statusCode != http.StatusOK {
+		logger.Warn("unexpected status code", zap.Int("status", statusCode))
+	}
+}
+
+func isRetriable(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	return false
 }
 
 func CreateMetricStorage() *MetricsStorage {

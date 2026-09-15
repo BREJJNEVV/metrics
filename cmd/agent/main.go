@@ -17,6 +17,7 @@ type flags struct {
 	Address        string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
+	key            string `env:"KEY"`
 }
 
 func main() {
@@ -34,11 +35,13 @@ func main() {
 	metricStorage := agent.CreateMetricStorage()
 	baseURL := fmt.Sprintf("http://%s", fl.Address)
 
+	agentConfig := agent.New(client, baseURL, fl.key, logger)
 	ctx := context.Background()
+
 	go func() {
 		for {
 			time.Sleep(time.Duration(fl.ReportInterval) * time.Second)
-			agent.Send(ctx, metricStorage, client, baseURL, logger)
+			agentConfig.Send(ctx, metricStorage)
 			metricStorage.ResetCounter("PollCount")
 		}
 	}()
@@ -58,6 +61,7 @@ func setFlags() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
 	reportInterval := flag.Int("r", 10, "report interval")
 	pollInterval := flag.Int("p", 2, "poll interval")
+	keySecret := flag.String("k", "", "secret key")
 	flag.Parse()
 
 	fl := flags{}
@@ -74,6 +78,9 @@ func setFlags() (flags, error) {
 	}
 	if fl.PollInterval == 0 {
 		fl.PollInterval = *pollInterval
+	}
+	if fl.key == "" {
+		fl.key = *keySecret
 	}
 
 	return fl, nil

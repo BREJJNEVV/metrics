@@ -85,7 +85,7 @@ func HashVerify(key string) func(next http.Handler) http.Handler {
 				return
 			}
 			if newHash == "" {
-				http.Error(w, "missing hash", http.StatusBadRequest)
+				next.ServeHTTP(w, r)
 				return
 			}
 

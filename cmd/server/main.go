@@ -38,7 +38,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("fatal error", zap.Error(err))
 	}
-
 	if fl.dbDSN != "" {
 		db, err = pgxpool.New(ctx, fl.dbDSN)
 		if err != nil {

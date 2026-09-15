@@ -91,6 +91,14 @@ func main() {
 	r.Use(handler.GzipCompress)
 	r.Use(handler.HashSign(fl.key))
 
+	r.Get("/", service.ListMetrics)
+	r.Get("/ping", healthHandler.Ping)
+	r.Route("/value", func(r chi.Router) {
+		r.Route("/{type:.*}", func(r chi.Router) {
+			r.Get("/{name:.*}", service.GetValue)
+		})
+	})
+
 	r.Group(func(r chi.Router) {
 		r.Use(handler.HashVerify(fl.key))
 		r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
@@ -100,14 +108,6 @@ func main() {
 		r.Post("/updates/", service.UpdatesJSON)
 		r.Post("/value", service.GetValueJSON)
 		r.Post("/value/", service.GetValueJSON)
-	})
-
-	r.Get("/", service.ListMetrics)
-	r.Get("/ping", healthHandler.Ping)
-	r.Route("/value", func(r chi.Router) {
-		r.Route("/{type:.*}", func(r chi.Router) {
-			r.Get("/{name:.*}", service.GetValue)
-		})
 	})
 
 	srv := http.Server{

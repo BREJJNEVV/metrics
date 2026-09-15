@@ -18,6 +18,7 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/compress"
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/BREJJNEVV/metrics/internal/retry"
+	"github.com/BREJJNEVV/metrics/internal/sign"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +36,13 @@ type MetricsStorage struct {
 	counter map[string]int64
 	gauge   map[string]float64
 	mu      sync.Mutex
+}
+
+type AgentConfig struct {
+	Client  *http.Client
+	Logger  *zap.Logger
+	BaseURL string
+	Key     string
 }
 
 func Collect(mw MetricsWriter) {
@@ -73,7 +81,7 @@ func Collect(mw MetricsWriter) {
 	mw.SetGauge("RandomValue", rand.Float64())
 }
 
-func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL string, logger *zap.Logger) {
+func (agent AgentConfig) Send(ctx context.Context, mr MetricsReader) {
 	metricsSlice := []model.Metrics{}
 
 	for name, value := range mr.Counters() {
@@ -95,21 +103,21 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 	}
 
 	if len(metricsSlice) == 0 {
-		logger.Info("No sending empty batch")
+		agent.Logger.Info("No sending empty batch")
 		return
 	}
 	data, err := json.Marshal(metricsSlice)
 	if err != nil {
-		logger.Error("error sending", zap.Error(err))
+		agent.Logger.Error("error sending", zap.Error(err))
 		return
 	}
 	compressedData, err := compress.Compress(data)
 	if err != nil {
-		logger.Error("error sending", zap.Error(err))
+		agent.Logger.Error("error sending", zap.Error(err))
 		return
 	}
 
-	url := fmt.Sprintf("%s/updates", baseURL)
+	url := fmt.Sprintf("%s/updates", agent.BaseURL)
 	var statusCode int
 
 	err = retry.Do(ctx, isRetriable, func() error {
@@ -117,11 +125,15 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 		if err != nil {
 			return err
 		}
+		if agent.Key != "" {
+			hash := sign.Sign(data, agent.Key)
+			request.Header.Set("HashSHA256", hash)
+		}
 
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Content-Encoding", "gzip")
 
-		resp, err := client.Do(request)
+		resp, err := agent.Client.Do(request)
 		if err != nil {
 			if resp != nil {
 				_ = resp.Body.Close()
@@ -137,12 +149,21 @@ func Send(ctx context.Context, mr MetricsReader, client *http.Client, baseURL st
 	})
 
 	if err != nil {
-		logger.Error("error sending", zap.Error(err))
+		agent.Logger.Error("error sending", zap.Error(err))
 		return
 	}
 
 	if statusCode != http.StatusOK {
-		logger.Warn("unexpected status code", zap.Int("status", statusCode))
+		agent.Logger.Warn("unexpected status code", zap.Int("status", statusCode))
+	}
+}
+
+func New(client *http.Client, baseURL string, key string, logger *zap.Logger) AgentConfig {
+	return AgentConfig{
+		Client:  client,
+		BaseURL: baseURL,
+		Key:     key,
+		Logger:  logger,
 	}
 }
 

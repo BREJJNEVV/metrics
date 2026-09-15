@@ -97,7 +97,9 @@ func TestSend(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-
+			if r.Header.Get("HashSHA256") == "" {
+				t.Error("missing HashSHA256 header")
+			}
 			body, _ := io.ReadAll(r.Body)
 			if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 				gz, err := gzip.NewReader(bytes.NewReader(body))
@@ -126,7 +128,8 @@ func TestSend(t *testing.T) {
 	defer server.Close()
 	logger, _ := zap.NewDevelopment()
 	ctx := context.Background()
-	Send(ctx, mr, client, server.URL, logger)
+	agentConfig := New(client, server.URL, "key", logger)
+	agentConfig.Send(ctx, mr)
 
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 requests, got %d", len(requests))

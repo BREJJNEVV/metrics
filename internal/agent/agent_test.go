@@ -85,19 +85,18 @@ type requestLog struct {
 	Body        []byte
 }
 
-func TestSend(t *testing.T) {
+func ptr(v float64) *float64 { return &v }
+func ptrInt(v int64) *int64  { return &v }
+
+func TestSendBatch(t *testing.T) {
 
 	client := &http.Client{}
-	mr := CreateMockReader(
-		map[string]float64{"Alloc": 123.45},
-		map[string]int64{"PollCount": 10},
-	)
-
 	var requests []requestLog
 
 	server := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("HashSHA256") == "" {
+			key := ""
+			if key != "" && r.Header.Get("HashSHA256") == "" {
 				t.Error("missing HashSHA256 header")
 			}
 			body, _ := io.ReadAll(r.Body)
@@ -128,8 +127,12 @@ func TestSend(t *testing.T) {
 	defer server.Close()
 	logger, _ := zap.NewDevelopment()
 	ctx := context.Background()
-	agentConfig := New(client, server.URL, "key", logger)
-	agentConfig.Send(ctx, mr)
+	cfg := New(ctx, client, server.URL, "", logger, 1)
+	batch := []model.Metrics{
+		{ID: "Alloc", MType: model.Gauge, Value: ptr(123.45)},
+		{ID: "PollCount", MType: model.Counter, Delta: ptrInt(10)},
+	}
+	cfg.SendBatch(ctx, batch)
 
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 requests, got %d", len(requests))

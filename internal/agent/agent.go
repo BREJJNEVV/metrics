@@ -20,6 +20,9 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/retry"
 	"github.com/BREJJNEVV/metrics/internal/sign"
 	"go.uber.org/zap"
+
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 type MetricsWriter interface {
@@ -43,6 +46,7 @@ type AgentConfig struct {
 	Logger  *zap.Logger
 	BaseURL string
 	Key     string
+	Jobs    chan []model.Metrics
 }
 
 func Collect(mw MetricsWriter) {
@@ -81,8 +85,128 @@ func Collect(mw MetricsWriter) {
 	mw.SetGauge("RandomValue", rand.Float64())
 }
 
-func (agent AgentConfig) Send(ctx context.Context, mr MetricsReader) {
-	metricsSlice := []model.Metrics{}
+func CollectSystemMetrics(mw MetricsWriter) error {
+	sysMetrics, err := mem.VirtualMemory()
+	if err != nil {
+		return fmt.Errorf("virtual memory: %w", err)
+	}
+	cpuMetrics, err := cpu.Percent(0, true)
+	if err != nil {
+		return fmt.Errorf("cpu percent: %w", err)
+	}
+	mw.SetGauge("TotalMemory", float64(sysMetrics.Total))
+	mw.SetGauge("FreeMemory", float64(sysMetrics.Free))
+
+	for i, v := range cpuMetrics {
+		str := fmt.Sprintf("CPUutilization%d", i+1)
+		mw.SetGauge(str, v)
+	}
+	return nil
+}
+
+// func (agent AgentConfig) Send(ctx context.Context, mr MetricsReader) {
+// 	metricsSlice := []model.Metrics{}
+
+// 	for name, value := range mr.Counters() {
+// 		v := value
+// 		var metric model.Metrics
+// 		metric.ID = name
+// 		metric.MType = model.Counter
+// 		metric.Delta = &v
+// 		metricsSlice = append(metricsSlice, metric)
+// 	}
+
+// 	for name, value := range mr.Gauges() {
+// 		v := value
+// 		var metric model.Metrics
+// 		metric.ID = name
+// 		metric.MType = model.Gauge
+// 		metric.Value = &v
+// 		metricsSlice = append(metricsSlice, metric)
+// 	}
+
+// 	if len(metricsSlice) == 0 {
+// 		agent.Logger.Info("No sending empty batch")
+// 		return
+// 	}
+// 	data, err := json.Marshal(metricsSlice)
+// 	if err != nil {
+// 		agent.Logger.Error("error sending", zap.Error(err))
+// 		return
+// 	}
+// 	compressedData, err := compress.Compress(data)
+// 	if err != nil {
+// 		agent.Logger.Error("error sending", zap.Error(err))
+// 		return
+// 	}
+
+// 	url := fmt.Sprintf("%s/updates", agent.BaseURL)
+// 	var statusCode int
+
+// 	err = retry.Do(ctx, isRetriable, func() error {
+// 		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
+// 		if err != nil {
+// 			return err
+// 		}
+// 		if agent.Key != "" {
+// 			hash := sign.Sign(data, agent.Key)
+// 			request.Header.Set("HashSHA256", hash)
+// 		}
+
+// 		request.Header.Set("Content-Type", "application/json")
+// 		request.Header.Set("Content-Encoding", "gzip")
+
+// 		resp, err := agent.Client.Do(request)
+// 		if err != nil {
+// 			if resp != nil {
+// 				_ = resp.Body.Close()
+// 			}
+// 			return err
+// 		}
+
+// 		_, _ = io.Copy(io.Discard, resp.Body)
+// 		_ = resp.Body.Close()
+// 		statusCode = resp.StatusCode
+// 		return nil
+
+// 	})
+
+// 	if err != nil {
+// 		agent.Logger.Error("error sending", zap.Error(err))
+// 		return
+// 	}
+
+// 	if statusCode != http.StatusOK {
+// 		agent.Logger.Warn("unexpected status code", zap.Int("status", statusCode))
+// 	}
+// }
+
+func New(ctx context.Context, client *http.Client, baseURL string, key string, logger *zap.Logger, rateLimit int) *AgentConfig {
+	a := &AgentConfig{
+		Client:  client,
+		BaseURL: baseURL,
+		Key:     key,
+		Logger:  logger,
+		Jobs:    make(chan []model.Metrics, rateLimit),
+	}
+	for range rateLimit {
+		go a.worker(ctx)
+	}
+	return a
+}
+
+func (a *AgentConfig) worker(ctx context.Context) {
+	for batch := range a.Jobs {
+		a.SendBatch(ctx, batch)
+	}
+}
+
+func (a *AgentConfig) Submit(batch []model.Metrics) {
+	a.Jobs <- batch
+}
+
+func CollectBatch(mr MetricsReader) []model.Metrics {
+	batch := []model.Metrics{}
 
 	for name, value := range mr.Counters() {
 		v := value
@@ -90,7 +214,7 @@ func (agent AgentConfig) Send(ctx context.Context, mr MetricsReader) {
 		metric.ID = name
 		metric.MType = model.Counter
 		metric.Delta = &v
-		metricsSlice = append(metricsSlice, metric)
+		batch = append(batch, metric)
 	}
 
 	for name, value := range mr.Gauges() {
@@ -99,25 +223,28 @@ func (agent AgentConfig) Send(ctx context.Context, mr MetricsReader) {
 		metric.ID = name
 		metric.MType = model.Gauge
 		metric.Value = &v
-		metricsSlice = append(metricsSlice, metric)
+		batch = append(batch, metric)
 	}
+	return batch
+}
 
-	if len(metricsSlice) == 0 {
-		agent.Logger.Info("No sending empty batch")
+func (a *AgentConfig) SendBatch(ctx context.Context, batch []model.Metrics) {
+	if len(batch) == 0 {
+		a.Logger.Info("No sending empty batch")
 		return
 	}
-	data, err := json.Marshal(metricsSlice)
+	data, err := json.Marshal(batch)
 	if err != nil {
-		agent.Logger.Error("error sending", zap.Error(err))
+		a.Logger.Error("error sending", zap.Error(err))
 		return
 	}
 	compressedData, err := compress.Compress(data)
 	if err != nil {
-		agent.Logger.Error("error sending", zap.Error(err))
+		a.Logger.Error("error sending", zap.Error(err))
 		return
 	}
 
-	url := fmt.Sprintf("%s/updates", agent.BaseURL)
+	url := fmt.Sprintf("%s/updates", a.BaseURL)
 	var statusCode int
 
 	err = retry.Do(ctx, isRetriable, func() error {
@@ -125,15 +252,15 @@ func (agent AgentConfig) Send(ctx context.Context, mr MetricsReader) {
 		if err != nil {
 			return err
 		}
-		if agent.Key != "" {
-			hash := sign.Sign(data, agent.Key)
+		if a.Key != "" {
+			hash := sign.Sign(data, a.Key)
 			request.Header.Set("HashSHA256", hash)
 		}
 
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Content-Encoding", "gzip")
 
-		resp, err := agent.Client.Do(request)
+		resp, err := a.Client.Do(request)
 		if err != nil {
 			if resp != nil {
 				_ = resp.Body.Close()
@@ -149,21 +276,12 @@ func (agent AgentConfig) Send(ctx context.Context, mr MetricsReader) {
 	})
 
 	if err != nil {
-		agent.Logger.Error("error sending", zap.Error(err))
+		a.Logger.Error("error sending", zap.Error(err))
 		return
 	}
 
 	if statusCode != http.StatusOK {
-		agent.Logger.Warn("unexpected status code", zap.Int("status", statusCode))
-	}
-}
-
-func New(client *http.Client, baseURL string, key string, logger *zap.Logger) AgentConfig {
-	return AgentConfig{
-		Client:  client,
-		BaseURL: baseURL,
-		Key:     key,
-		Logger:  logger,
+		a.Logger.Warn("unexpected status code", zap.Int("status", statusCode))
 	}
 }
 

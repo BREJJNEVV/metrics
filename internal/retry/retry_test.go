@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-var retriableErr = errors.New("transient")
-var fatalErr = errors.New("fatal")
+var errRetriable = errors.New("retriable")
+var errFatal = errors.New("fatal")
 
 func TestDoSuccess(t *testing.T) {
 
@@ -31,7 +31,7 @@ func TestDoNonRetriableStops(t *testing.T) {
 	ctx := context.Background()
 	err := Do(ctx, isRetriable, func() error {
 		calls++
-		return fatalErr
+		return errFatal
 	})
 	if err == nil {
 		t.Fatalf("Do not failed: %v", err)
@@ -50,7 +50,7 @@ func TestDoRetriableEventuallySucceeds(t *testing.T) {
 	err := Do(ctx, isRetriable, func() error {
 		calls++
 		if calls < 3 {
-			return retriableErr
+			return errRetriable
 		}
 		return nil
 	})
@@ -63,7 +63,7 @@ func TestDoRetriableEventuallySucceeds(t *testing.T) {
 }
 
 func isRetriable(err error) bool {
-	return errors.Is(err, retriableErr)
+	return errors.Is(err, errRetriable)
 }
 
 func TestDoExhaustsRetries(t *testing.T) {
@@ -74,10 +74,10 @@ func TestDoExhaustsRetries(t *testing.T) {
 	ctx := context.Background()
 	err := Do(ctx, isRetriable, func() error {
 		calls++
-		return retriableErr
+		return errRetriable
 	})
-	if !errors.Is(err, retriableErr) {
-		t.Fatalf("expected retriableErr, got %v", err)
+	if !errors.Is(err, errRetriable) {
+		t.Fatalf("expected errRetriable, got %v", err)
 	}
 	if calls != 4 {
 		t.Errorf("expected 4 calls, got %d", calls)

@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"bytes"
 	"compress/gzip"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/compress"
+	"github.com/BREJJNEVV/metrics/internal/sign"
+
 	"github.com/go-chi/chi/middleware"
 	"go.uber.org/zap"
 )
@@ -72,6 +76,30 @@ func GzipCompress(next http.Handler) http.Handler {
 	})
 }
 
+func HashVerify(key string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			newHash := r.Header.Get("HashSHA256")
+			if newHash == "" {
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+				return
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "cannot read body", http.StatusBadRequest)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+
+			if !sign.Verify(body, key, newHash) {
+				http.Error(w, "hash mismatch", http.StatusBadRequest)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func (grw *gzipResponceWriter) WriteHeader(statusCode int) {
 	if grw.wroteHeader {
 		return
@@ -98,4 +126,38 @@ func (grw *gzipResponceWriter) Write(data []byte) (int, error) {
 		return grw.gz.Write(data)
 	}
 	return grw.ResponseWriter.Write(data)
+}
+
+type signResponceWriter struct {
+	http.ResponseWriter
+	buf         bytes.Buffer
+	status      int
+	wroteHeader bool
+}
+
+func HashSign(key string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srw := &signResponceWriter{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(srw, r)
+			body := srw.buf.Bytes()
+			w.Header().Set("HashSHA256", sign.Sign(body, key))
+			w.WriteHeader(srw.status)
+			_, _ = w.Write(body)
+		})
+	}
+}
+
+func (srw *signResponceWriter) WriteHeader(statusCode int) {
+	if srw.wroteHeader {
+		return
+	}
+	srw.status = statusCode
+	srw.wroteHeader = true
+}
+func (srw *signResponceWriter) Write(data []byte) (int, error) {
+	if !srw.wroteHeader {
+		srw.WriteHeader(http.StatusOK)
+	}
+	return srw.buf.Write(data)
 }

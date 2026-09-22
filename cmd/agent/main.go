@@ -17,6 +17,8 @@ type flags struct {
 	Address        string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
+	Key            string `env:"KEY"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
 func main() {
@@ -33,31 +35,62 @@ func main() {
 	client := &http.Client{}
 	metricStorage := agent.CreateMetricStorage()
 	baseURL := fmt.Sprintf("http://%s", fl.Address)
-
 	ctx := context.Background()
+	agentConfig := agent.New(ctx, client, baseURL, fl.Key, logger, fl.RateLimit)
+
 	go func() {
+		ticker := time.NewTicker(time.Duration(fl.ReportInterval) * time.Second)
+		defer ticker.Stop()
 		for {
-			time.Sleep(time.Duration(fl.ReportInterval) * time.Second)
-			agent.Send(ctx, metricStorage, client, baseURL, logger)
-			metricStorage.ResetCounter("PollCount")
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				batch := agent.CollectBatch(metricStorage)
+				agentConfig.Submit(batch)
+				metricStorage.ResetCounter("PollCount")
+			}
 		}
 	}()
 
 	go func() {
+		ticker := time.NewTicker(time.Duration(fl.PollInterval) * time.Second)
+		defer ticker.Stop()
 		for {
-			time.Sleep(time.Duration(fl.PollInterval) * time.Second)
-			agent.Collect(metricStorage)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				agent.Collect(metricStorage)
+			}
 		}
 	}()
 
-	select {}
+	go func() {
+		ticker := time.NewTicker(time.Duration(fl.PollInterval) * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				err := agent.CollectSystemMetrics(metricStorage)
+				if err != nil {
+					logger.Error("CollectSystemMetrics error", zap.Error(err))
+				}
+			}
+		}
+	}()
 
+	<-ctx.Done()
 }
 
 func setFlags() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
 	reportInterval := flag.Int("r", 10, "report interval")
 	pollInterval := flag.Int("p", 2, "poll interval")
+	keySecret := flag.String("k", "", "secret key")
+	rateLimit := flag.Int("l", 1, "rate limit")
 	flag.Parse()
 
 	fl := flags{}
@@ -74,6 +107,12 @@ func setFlags() (flags, error) {
 	}
 	if fl.PollInterval == 0 {
 		fl.PollInterval = *pollInterval
+	}
+	if fl.Key == "" {
+		fl.Key = *keySecret
+	}
+	if fl.RateLimit == 0 {
+		fl.RateLimit = *rateLimit
 	}
 
 	return fl, nil

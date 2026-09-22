@@ -38,7 +38,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("fatal error", zap.Error(err))
 	}
-
 	if fl.dbDSN != "" {
 		db, err = pgxpool.New(ctx, fl.dbDSN)
 		if err != nil {
@@ -61,13 +60,19 @@ func main() {
 		if fl.Interval > 0 {
 			prstsNew := storage
 			repo = prstsNew
-
+			pinger = prstsNew
 			go func() {
+				ticker := time.NewTicker(time.Duration(fl.Interval) * time.Second)
+				defer ticker.Stop()
 				for {
-					time.Sleep(time.Duration(fl.Interval * int64(time.Second)))
-					err = persistence.SaveMetrics(ctx, storage, fl.StoragePath)
-					if err != nil {
-						logger.Error("save metrics error", zap.Error(err))
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						err := persistence.SaveMetrics(ctx, storage, fl.StoragePath)
+						if err != nil {
+							logger.Error("save metrics error", zap.Error(err))
+						}
 					}
 				}
 			}()
@@ -89,23 +94,30 @@ func main() {
 	r.Use(handler.WithLogging(logger))
 	r.Use(handler.GzipDecompress)
 	r.Use(handler.GzipCompress)
+	if fl.key != "" {
+		r.Use(handler.HashSign(fl.key))
+	}
 
-	r.Get("/ping", healthHandler.Ping)
-
-	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
-	r.Post("/update", service.UpdateJSON)
-	r.Post("/update/", service.UpdateJSON)
-	r.Post("/updates", service.UpdatesJSON)
-	r.Post("/updates/", service.UpdatesJSON)
 	r.Get("/", service.ListMetrics)
-
+	r.Get("/ping", healthHandler.Ping)
 	r.Route("/value", func(r chi.Router) {
 		r.Route("/{type:.*}", func(r chi.Router) {
 			r.Get("/{name:.*}", service.GetValue)
 		})
 	})
-	r.Post("/value", service.GetValueJSON)
-	r.Post("/value/", service.GetValueJSON)
+
+	r.Group(func(r chi.Router) {
+		if fl.key != "" {
+			r.Use(handler.HashVerify(fl.key))
+		}
+		r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
+		r.Post("/update", service.UpdateJSON)
+		r.Post("/update/", service.UpdateJSON)
+		r.Post("/updates", service.UpdatesJSON)
+		r.Post("/updates/", service.UpdatesJSON)
+		r.Post("/value", service.GetValueJSON)
+		r.Post("/value/", service.GetValueJSON)
+	})
 
 	srv := http.Server{
 		Handler: r,
@@ -124,6 +136,7 @@ type flags struct {
 	StoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore     bool   `env:"RESTORE"`
 	dbDSN       string `env:"DATABASE_DSN"`
+	key         string `env:"KEY"`
 }
 
 func setFlagsEnv() (flags, error) {
@@ -132,6 +145,7 @@ func setFlagsEnv() (flags, error) {
 	storagePath := flag.String("f", "", "storage path")
 	restore := flag.Bool("r", false, "restore data or not")
 	dbDSN := flag.String("d", "", "address db connection")
+	key := flag.String("k", "", "secret key")
 	flag.Parse()
 
 	var fl flags
@@ -165,13 +179,18 @@ func setFlagsEnv() (flags, error) {
 	}
 
 	env := os.Getenv("DATABASE_DSN")
-
 	if env != "" {
 		fl.dbDSN = env
 	} else if *dbDSN != "" {
 		fl.dbDSN = *dbDSN
 	} else {
 		fl.dbDSN = ""
+	}
+
+	if env := os.Getenv("KEY"); env != "" {
+		fl.key = env
+	} else {
+		fl.key = *key
 	}
 	return fl, nil
 }

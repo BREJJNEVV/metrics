@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	Delay    int = 2
 	Attempts int = 4
 )
+
+var delays = []time.Duration{time.Second, 3 * time.Second, 5 * time.Second}
 
 func Do(ctx context.Context, isRetriable func(error) bool, fn func() error) error {
 	var err error
@@ -26,7 +27,7 @@ func Do(ctx context.Context, isRetriable func(error) bool, fn func() error) erro
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(1+(Delay*i)) * time.Second):
+		case <-time.After(delays[i]):
 		}
 	}
 	return err

@@ -46,7 +46,7 @@ type AgentConfig struct {
 	Logger  *zap.Logger
 	BaseURL string
 	Key     string
-	Jobs    chan []model.Metrics
+	jobs    chan []model.Metrics
 }
 
 func Collect(mw MetricsWriter) {
@@ -110,7 +110,7 @@ func New(ctx context.Context, client *http.Client, baseURL string, key string, l
 		BaseURL: baseURL,
 		Key:     key,
 		Logger:  logger,
-		Jobs:    make(chan []model.Metrics, rateLimit),
+		jobs:    make(chan []model.Metrics, rateLimit),
 	}
 	for range rateLimit {
 		go a.worker(ctx)
@@ -119,13 +119,21 @@ func New(ctx context.Context, client *http.Client, baseURL string, key string, l
 }
 
 func (a *AgentConfig) worker(ctx context.Context) {
-	for batch := range a.Jobs {
-		a.SendBatch(ctx, batch)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case batch, ok := <-a.jobs:
+			if !ok {
+				return
+			}
+			a.SendBatch(ctx, batch)
+		}
 	}
 }
 
 func (a *AgentConfig) Submit(batch []model.Metrics) {
-	a.Jobs <- batch
+	a.jobs <- batch
 }
 
 func CollectBatch(mr MetricsReader) []model.Metrics {

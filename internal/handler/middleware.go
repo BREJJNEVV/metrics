@@ -80,15 +80,10 @@ func HashVerify(key string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			newHash := r.Header.Get("HashSHA256")
-			if key == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
 			if newHash == "" {
-				next.ServeHTTP(w, r)
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
-
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				http.Error(w, "cannot read body", http.StatusBadRequest)
@@ -96,7 +91,7 @@ func HashVerify(key string) func(next http.Handler) http.Handler {
 			}
 			r.Body = io.NopCloser(bytes.NewReader(body))
 
-			if !sign.Verify(string(body), key, newHash) {
+			if !sign.Verify(body, key, newHash) {
 				http.Error(w, "hash mismatch", http.StatusBadRequest)
 				return
 			}
@@ -143,10 +138,6 @@ type signResponceWriter struct {
 func HashSign(key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if key == "" {
-				next.ServeHTTP(w, r)
-				return
-			}
 			srw := &signResponceWriter{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(srw, r)
 			body := srw.buf.Bytes()

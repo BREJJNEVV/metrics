@@ -12,10 +12,9 @@ func TestSign(t *testing.T) {
 	if hash1 != hash2 {
 		t.Errorf("Sign is not deterministic: %q != %q", hash1, hash2)
 	}
-	if len(hash1) != 64 {
-		t.Errorf("expected 64 hex chars, got %d", len(hash1))
+	if len(hash1) != 44 {
+		t.Errorf("expected 44 base64 chars, got %d", len(hash1))
 	}
-
 	data2 := "anotherTestData"
 	hash3 := Sign([]byte(data2), "key")
 	if hash1 == hash3 {
@@ -24,14 +23,14 @@ func TestSign(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	data := "testData"
+	data := []byte("testData")
 	key := "key"
 	hash := Sign([]byte(data), key)
 
 	if !Verify(data, key, hash) {
 		t.Error("Verify should return true for valid data")
 	}
-	if Verify("otherData", key, hash) {
+	if Verify([]byte("otherData"), key, hash) {
 		t.Error("Verify should return false for tampered data")
 	}
 	if Verify(data, "wrongkey", hash) {

@@ -62,11 +62,17 @@ func main() {
 			repo = prstsNew
 			pinger = prstsNew
 			go func() {
+				ticker := time.NewTicker(time.Duration(fl.Interval) * time.Second)
+				defer ticker.Stop()
 				for {
-					time.Sleep(time.Duration(fl.Interval * int64(time.Second)))
-					err = persistence.SaveMetrics(ctx, storage, fl.StoragePath)
-					if err != nil {
-						logger.Error("save metrics error", zap.Error(err))
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						err := persistence.SaveMetrics(ctx, storage, fl.StoragePath)
+						if err != nil {
+							logger.Error("save metrics error", zap.Error(err))
+						}
 					}
 				}
 			}()
@@ -88,7 +94,9 @@ func main() {
 	r.Use(handler.WithLogging(logger))
 	r.Use(handler.GzipDecompress)
 	r.Use(handler.GzipCompress)
-	r.Use(handler.HashSign(fl.key))
+	if fl.key != "" {
+		r.Use(handler.HashSign(fl.key))
+	}
 
 	r.Get("/", service.ListMetrics)
 	r.Get("/ping", healthHandler.Ping)
@@ -99,7 +107,9 @@ func main() {
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(handler.HashVerify(fl.key))
+		if fl.key != "" {
+			r.Use(handler.HashVerify(fl.key))
+		}
 		r.Post("/update/{type:.*}/{name:.*}/{value:.*}", service.Update)
 		r.Post("/update", service.UpdateJSON)
 		r.Post("/update/", service.UpdateJSON)

@@ -39,32 +39,50 @@ func main() {
 	agentConfig := agent.New(ctx, client, baseURL, fl.Key, logger, fl.RateLimit)
 
 	go func() {
+		ticker := time.NewTicker(time.Duration(fl.ReportInterval) * time.Second)
+		defer ticker.Stop()
 		for {
-			time.Sleep(time.Duration(fl.ReportInterval) * time.Second)
-			batch := agent.CollectBatch(metricStorage)
-			agentConfig.Submit(batch)
-			metricStorage.ResetCounter("PollCount")
-		}
-	}()
-
-	go func() {
-		for {
-			time.Sleep(time.Duration(fl.PollInterval) * time.Second)
-			agent.Collect(metricStorage)
-		}
-	}()
-
-	go func() {
-		for {
-			time.Sleep(time.Duration(fl.PollInterval) * time.Second)
-			err = agent.CollectSystemMetrics(metricStorage)
-			if err != nil {
-				logger.Error("CollectSystemMetrics error", zap.Error(err))
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				batch := agent.CollectBatch(metricStorage)
+				agentConfig.Submit(batch)
+				metricStorage.ResetCounter("PollCount")
 			}
 		}
 	}()
-	select {}
 
+	go func() {
+		ticker := time.NewTicker(time.Duration(fl.PollInterval) * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				agent.Collect(metricStorage)
+			}
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(time.Duration(fl.PollInterval) * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				err := agent.CollectSystemMetrics(metricStorage)
+				if err != nil {
+					logger.Error("CollectSystemMetrics error", zap.Error(err))
+				}
+			}
+		}
+	}()
+
+	<-ctx.Done()
 }
 
 func setFlags() (flags, error) {

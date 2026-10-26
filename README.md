@@ -4,7 +4,6 @@
 
 [![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Tests](https://github.com/BREJJNEVV/metrics/actions/workflows/metricstest.yml/badge.svg)](https://github.com/BREJJNEVV/metrics/actions/workflows/metricstest.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 📖 О проекте
@@ -13,8 +12,6 @@
 
 - **Агент** периодически опрашивает пакет `runtime` и системные метрики через `gopsutil`, а затем отправляет их на сервер батчами.
 - **Сервер** принимает метрики по HTTP, хранит их в памяти, файле или PostgreSQL, отдаёт по запросу и отображает в HTML.
-
-Проект охватывает полный цикл разработки backend-сервиса: от HTTP-хендлеров до работы с СУБД, миграций, сжатия, подписи запросов и CI/CD.
 
 ## ✨ Возможности
 
@@ -288,39 +285,6 @@ HashSHA256 = base64(hmac_sha256(key, body))
 
 Сервер также подписывает ответы тем же ключом.
 
-## 🧪 Тестирование
-
-Запустить все тесты:
-
-```bash
-go test ./...
-```
-
-Запустить тесты с race detector:
-
-```bash
-go test -race ./...
-```
-
-Собрать отчёт о покрытии:
-
-```bash
-go test -coverprofile=cover.out ./...
-go tool cover -func=cover.out
-go tool cover -html=cover.out
-```
-
-### Покрытие по пакетам
-
-| Пакет | Покрытие |
-|---|---:|
-| `internal/sign` | 100% |
-| `internal/repository/memory` | 90% |
-| `internal/compress` | 76% |
-| `internal/retry` | 75% |
-| `internal/agent` | ~44% |
-| `internal/handler` | ~18% |
-
 ## 🛠️ Технологии
 
 | Категория | Библиотека / технология |
@@ -381,25 +345,3 @@ WithLogging → GzipDecompress → GzipCompress → HashSign → HashVerify → 
 ### 10. Изоляция middleware для подписи
 
 `signResponseWriter` буферизует ответ в памяти, чтобы подписать его до сжатия. После вычисления хеша буфер отправляется в исходный `ResponseWriter`.
-
-## 🤝 Вклад
-
-Проект учебный, но pull request'ы и обсуждения приветствуются.
-
-```bash
-# Создать ветку
-git checkout -b feat/my-improvement
-
-# Внести изменения и запустить тесты
-go test ./...
-
-# Закоммитить и отправить изменения
-git commit -m "feat: my improvement"
-git push origin feat/my-improvement
-```
-
-## 📄 Лицензия
-
-Лицензия MIT — см. файл [LICENSE](LICENSE).
-
----

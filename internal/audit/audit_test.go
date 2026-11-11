@@ -146,8 +146,6 @@ func TestURLObserver_HandleNon200(t *testing.T) {
 	}
 }
 
-// ---------- Auditor.Notify ----------
-
 type mockObserver struct {
 	events []Event
 	err    error
@@ -198,6 +196,5 @@ func TestAuditor_NotifyNoObservers(t *testing.T) {
 	logger := zap.NewNop()
 	a := NewAuditor(logger)
 
-	// не должно паниковать
 	a.Notify(Event{TS: 1})
 }

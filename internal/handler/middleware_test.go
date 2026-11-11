@@ -12,8 +12,6 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/sign"
 )
 
-// --- HashVerify ---
-
 func TestHashVerify(t *testing.T) {
 	const key = "secret"
 	body := []byte(`{"id":"Alloc"}`)
@@ -52,8 +50,6 @@ func TestHashVerify(t *testing.T) {
 	}
 }
 
-// --- HashSign ---
-
 func TestHashSign(t *testing.T) {
 	const key = "secret"
 
@@ -79,8 +75,6 @@ func TestHashSign(t *testing.T) {
 		t.Errorf("body: got %q", w.Body.String())
 	}
 }
-
-// --- GzipDecompress ---
 
 func TestGzipDecompress(t *testing.T) {
 	t.Run("gzipped body", func(t *testing.T) {
@@ -141,8 +135,6 @@ func TestGzipDecompress(t *testing.T) {
 		}
 	})
 }
-
-// --- GzipCompress ---
 
 func TestGzipCompress(t *testing.T) {
 	t.Run("compresses json", func(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BREJJNEVV/metrics/internal/audit"
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/go-chi/chi"
 )
@@ -19,15 +20,27 @@ type mockRepository struct {
 	SetValue float64
 	GetCall  bool
 
+	BatchCalled bool
+	BatchArg    []model.Metrics
+
 	gauge   map[string]float64
 	counter map[string]int64
+}
+
+type mockNotifier struct {
+	events []audit.Event
+}
+
+func (m *mockNotifier) Notify(e audit.Event) {
+	m.events = append(m.events, e)
 }
 
 func TestUpdateGauge(t *testing.T) {
 
 	mock := &mockRepository{}
 	updHandler := MetricService{
-		repo: mock,
+		repo:  mock,
+		audit: &mockNotifier{},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/123.45", nil)
@@ -60,7 +73,8 @@ func TestUpdateCounter(t *testing.T) {
 
 	mock := &mockRepository{}
 	updHandler := MetricService{
-		repo: mock,
+		repo:  mock,
+		audit: &mockNotifier{},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/update/counter/PollCount/10", nil)
@@ -145,7 +159,11 @@ func TestUpdateErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockRepository{}
-			service := MetricService{repo: mock}
+
+			service := MetricService{
+				repo:  mock,
+				audit: &mockNotifier{},
+			}
 			req := httptest.NewRequest(tt.method, tt.url, nil)
 
 			r := chi.NewRouter()
@@ -179,6 +197,8 @@ func (mr *mockRepository) Add(ctx context.Context, name string, value int64) err
 	return nil
 }
 
-func (mr *mockRepository) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
+func (m *mockRepository) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
+	m.BatchCalled = true
+	m.BatchArg = metrics
 	return nil
 }

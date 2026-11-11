@@ -3,9 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"net/http"
 
+	"github.com/BREJJNEVV/metrics/internal/audit"
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"go.uber.org/zap"
 )
@@ -50,6 +52,16 @@ func (ms *MetricService) UpdatesJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
+	metricsName := make([]string, 0, len(requests))
+	for _, v := range requests {
+		metricsName = append(metricsName, v.ID)
+	}
+	ms.audit.Notify(audit.Event{
+		TS:      time.Now().Unix(),
+		Metrics: metricsName,
+		IPAddr:  clientIP(r),
+	})
 
 	w.WriteHeader(http.StatusOK)
 

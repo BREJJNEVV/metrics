@@ -5,11 +5,15 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"go.uber.org/zap"
@@ -175,5 +179,81 @@ func TestSendBatch(t *testing.T) {
 			}
 		}
 
+	}
+}
+
+func TestCollectBatch(t *testing.T) {
+	mr := CreateMockReader(
+		map[string]float64{"Alloc": 100, "Sys": 200},
+		map[string]int64{"PollCount": 5},
+	)
+
+	batch := CollectBatch(mr)
+
+	if len(batch) != 3 {
+		t.Fatalf("expected 3 metrics, got %d", len(batch))
+	}
+
+	byID := make(map[string]model.Metrics)
+	for _, m := range batch {
+		byID[m.ID] = m
+	}
+
+	if g, ok := byID["Alloc"]; !ok || g.Value == nil || *g.Value != 100 {
+		t.Errorf("Alloc missing or wrong: %+v", g)
+	}
+	if g, ok := byID["Sys"]; !ok || g.Value == nil || *g.Value != 200 {
+		t.Errorf("Sys missing or wrong: %+v", g)
+	}
+	if c, ok := byID["PollCount"]; !ok || c.Delta == nil || *c.Delta != 5 {
+		t.Errorf("PollCount missing or wrong: %+v", c)
+	}
+}
+
+func TestCollectBatch_Empty(t *testing.T) {
+	mr := CreateMockReader(nil, nil)
+	batch := CollectBatch(mr)
+	if len(batch) != 0 {
+		t.Errorf("expected empty batch, got %d", len(batch))
+	}
+}
+
+func TestIsRetriable(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"generic", errors.New("some error"), false},
+		{"conn refused", syscall.ECONNREFUSED, true},
+		{"conn reset", syscall.ECONNRESET, true},
+		{"wrapped conn refused", fmt.Errorf("dial: %w", syscall.ECONNREFUSED), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isRetriable(tt.err); got != tt.want {
+				t.Errorf("isRetriable(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSubmit(t *testing.T) {
+	cfg := New(context.Background(), &http.Client{}, "http://localhost", "", zap.NewNop(), 1)
+
+	batch := []model.Metrics{
+		{ID: "A", MType: model.Gauge},
+	}
+
+	cfg.Submit(batch)
+
+	select {
+	case got := <-cfg.jobs:
+		if len(got) != 1 || got[0].ID != "A" {
+			t.Errorf("unexpected batch: %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Submit did not put task in channel")
 	}
 }

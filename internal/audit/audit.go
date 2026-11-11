@@ -101,8 +101,8 @@ func NewAuditor(logger *zap.Logger) *Auditor {
 	}
 }
 
-func (s *Auditor) Subscribe(o Observer) {
-	s.observers = append(s.observers, o)
+func (a *Auditor) Subscribe(o Observer) {
+	a.observers = append(a.observers, o)
 }
 
 func NewFileObserver(path string) *FileObserver {

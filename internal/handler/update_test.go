@@ -197,8 +197,8 @@ func (mr *mockRepository) Add(ctx context.Context, name string, value int64) err
 	return nil
 }
 
-func (m *mockRepository) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
-	m.BatchCalled = true
-	m.BatchArg = metrics
+func (mr *mockRepository) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
+	mr.BatchCalled = true
+	mr.BatchArg = metrics
 	return nil
 }

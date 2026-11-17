@@ -10,12 +10,16 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/BREJJNEVV/metrics/internal/audit"
 	"github.com/BREJJNEVV/metrics/internal/handler"
 	"github.com/BREJJNEVV/metrics/internal/persistence"
 	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 	"github.com/BREJJNEVV/metrics/internal/repository/postgres"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"go.uber.org/zap"
+
+	_ "net/http/pprof"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -87,7 +91,14 @@ func main() {
 		pinger = mem
 	}
 
-	service := handler.CreateMetricService(repo, logger)
+	auditor := audit.NewAuditor(logger)
+	if fl.auditFile != "" {
+		auditor.Subscribe(audit.NewFileObserver(fl.auditFile))
+	}
+	if fl.auditURL != "" {
+		auditor.Subscribe(audit.NewURLObserver(fl.auditURL, &http.Client{Timeout: 5 * time.Second}))
+	}
+	service := handler.CreateMetricService(repo, logger, auditor)
 	healthHandler := handler.NewHealthHandler(pinger, logger)
 
 	r := chi.NewRouter()
@@ -119,6 +130,7 @@ func main() {
 		r.Post("/value/", service.GetValueJSON)
 	})
 
+	r.Mount("/debug", middleware.Profiler())
 	srv := http.Server{
 		Handler: r,
 		Addr:    fl.Address,
@@ -137,15 +149,19 @@ type flags struct {
 	Restore     bool   `env:"RESTORE"`
 	dbDSN       string `env:"DATABASE_DSN"`
 	key         string `env:"KEY"`
+	auditFile   string `env:"AUDIT_FILE"`
+	auditURL    string `env:"AUDIT_URL"`
 }
 
 func setFlagsEnv() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
-	interval := flag.Int64("i", 300, "store interval")
+	interval := flag.Int64("i", 5, "store interval")
 	storagePath := flag.String("f", "", "storage path")
 	restore := flag.Bool("r", false, "restore data or not")
 	dbDSN := flag.String("d", "", "address db connection")
 	key := flag.String("k", "", "secret key")
+	auditFile := flag.String("audit-file", "", "audit file")
+	auditURL := flag.String("audit-url", "", "audit URL")
 	flag.Parse()
 
 	var fl flags
@@ -191,6 +207,17 @@ func setFlagsEnv() (flags, error) {
 		fl.key = env
 	} else {
 		fl.key = *key
+	}
+
+	if env := os.Getenv("AUDIT_FILE"); env != "" {
+		fl.auditFile = env
+	} else {
+		fl.auditFile = *auditFile
+	}
+	if env := os.Getenv("AUDIT_URL"); env != "" {
+		fl.auditURL = env
+	} else {
+		fl.auditURL = *auditURL
 	}
 	return fl, nil
 }

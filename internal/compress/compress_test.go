@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func BenchmarkCompress(b *testing.B) {
+	data := []byte("random data for benchmarking comress func")
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := Compress(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDecompress(b *testing.B) {
+	d := []byte("random data for benchmarking comress func")
+	data, _ := Compress(d)
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := Decompress(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestDecompressInvalid(t *testing.T) {
 	data := []byte("this is not gzip")
 	_, err := Decompress(data)

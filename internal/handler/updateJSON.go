@@ -3,9 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"net/http"
 
+	"github.com/BREJJNEVV/metrics/internal/audit"
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"go.uber.org/zap"
 )
@@ -64,6 +66,12 @@ func (ms *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+
+	ms.audit.Notify(audit.Event{
+		TS:      time.Now().Unix(),
+		Metrics: []string{request.ID},
+		IPAddr:  clientIP(r),
+	})
 
 	w.WriteHeader(http.StatusOK)
 }

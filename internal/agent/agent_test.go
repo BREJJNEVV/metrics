@@ -257,3 +257,15 @@ func TestSubmit(t *testing.T) {
 		t.Fatal("Submit did not put task in channel")
 	}
 }
+
+func BenchmarkCollectBatch(b *testing.B) {
+	mr := CreateMockReader(
+		map[string]float64{"Alloc": 100, "Sys": 200},
+		map[string]int64{"PollCount": 5},
+	)
+	b.ResetTimer()
+	for b.Loop() {
+		CollectBatch(mr)
+	}
+
+}

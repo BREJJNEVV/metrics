@@ -137,7 +137,7 @@ func (a *AgentConfig) Submit(batch []model.Metrics) {
 }
 
 func CollectBatch(mr MetricsReader) []model.Metrics {
-	batch := []model.Metrics{}
+	batch := make([]model.Metrics, 0, len(mr.Counters())+len(mr.Gauges()))
 
 	for name, value := range mr.Counters() {
 		v := value

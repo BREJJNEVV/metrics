@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
+	"sync"
 	"time"
 
 	"net/http"
@@ -12,14 +14,31 @@ import (
 	"go.uber.org/zap"
 )
 
+var bufferPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
 func (ms *MetricService) UpdatesJSON(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" || !strings.HasPrefix(ct, "application/json") {
 		http.Error(w, "wrong Content-Type", http.StatusBadRequest)
 		return
 	}
+
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufferPool.Put(buf)
+
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	var requests []model.Metrics
-	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
+	if err := json.Unmarshal(buf.Bytes(), &requests); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

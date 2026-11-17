@@ -112,3 +112,17 @@ func TestUpdateJSON(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkUpdateJSON(b *testing.B) {
+	mock := &mockRepository{}
+	notifier := &mockNotifier{}
+	service := MetricService{repo: mock, logger: zap.NewNop(), audit: notifier}
+	req := httptest.NewRequest(http.MethodPost, "/update", strings.NewReader(`{"id":"PollCount","type":"counter","delta":10}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	b.ResetTimer()
+	for b.Loop() {
+		service.UpdateJSON(w, req)
+	}
+}

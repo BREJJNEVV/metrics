@@ -95,3 +95,20 @@ func TestUpdatesJSON(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkUpdatesJSON(b *testing.B) {
+	mock := &mockRepository{}
+	notifier := &mockNotifier{}
+	service := MetricService{repo: mock, logger: zap.NewNop(), audit: notifier}
+
+	b.ResetTimer()
+	for b.Loop() {
+		req := httptest.NewRequest(http.MethodPost, "/update", strings.NewReader(`[{"id":"PollCount","type":"counter","delta":10}]`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		service.UpdatesJSON(w, req)
+		if w.Code != http.StatusOK {
+			b.Fatalf("unexpected status: %d, body: %s", w.Code, w.Body.String())
+		}
+	}
+}

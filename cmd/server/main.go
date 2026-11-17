@@ -16,7 +16,10 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 	"github.com/BREJJNEVV/metrics/internal/repository/postgres"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"go.uber.org/zap"
+
+	_ "net/http/pprof"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -127,6 +130,7 @@ func main() {
 		r.Post("/value/", service.GetValueJSON)
 	})
 
+	r.Mount("/debug", middleware.Profiler())
 	srv := http.Server{
 		Handler: r,
 		Addr:    fl.Address,
@@ -151,7 +155,7 @@ type flags struct {
 
 func setFlagsEnv() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
-	interval := flag.Int64("i", 300, "store interval")
+	interval := flag.Int64("i", 5, "store interval")
 	storagePath := flag.String("f", "", "storage path")
 	restore := flag.Bool("r", false, "restore data or not")
 	dbDSN := flag.String("d", "", "address db connection")

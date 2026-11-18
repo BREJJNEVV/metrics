@@ -12,6 +12,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// UpdateJSON обрабатывает POST запросы на пути /update.
+// Принимает данные метрики в формате JSON в теле запроса.
+// Требует заголовок Content-Type: application/json.
+// Возвращает HTTP 200 при успешном обновлении.
+// Возвращает HTTP 400 при невалидном типе, имени или значении метрики.
+// Возвращает HTTP 500 при ошибке сохранения в репозитории.
 func (ms *MetricService) UpdateJSON(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" || !strings.HasPrefix(ct, "application/json") {

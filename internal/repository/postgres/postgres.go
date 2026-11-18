@@ -1,3 +1,4 @@
+// Package postgres определяет интерфейс хранилища метрик в PostgreSQL.
 package postgres
 
 import (
@@ -17,21 +18,25 @@ import (
 	"go.uber.org/zap"
 )
 
+// queryInsertGauge содержит SQL-запрос для сохранения или обновления метрики типа gauge.
 const queryInsertGauge string = `INSERT INTO gauge_metrics (name, value)
      VALUES ($1, $2)
      ON CONFLICT (name) DO UPDATE 
-	 SET value = EXCLUDED.value`
+     SET value = EXCLUDED.value`
 
+// queryInsertCounter содержит SQL-запрос для увеличения значения метрики типа counter.
 const queryInsertCounter string = `INSERT INTO counter_metrics (name, value)
      VALUES ($1, $2)
      ON CONFLICT (name) DO UPDATE 
-	 SET value = counter_metrics.value + EXCLUDED.value`
+     SET value = counter_metrics.value + EXCLUDED.value`
 
+// PsgsRepository предоставляет доступ к хранилищу метрик в PostgreSQL.
 type PsgsRepository struct {
 	db     *pgxpool.Pool
 	logger *zap.Logger
 }
 
+// Add увеличивает значение метрики типа counter.
 func (p *PsgsRepository) Add(ctx context.Context, name string, value int64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		_, err := p.db.Exec(ctx, queryInsertCounter, name, value)
@@ -40,6 +45,7 @@ func (p *PsgsRepository) Add(ctx context.Context, name string, value int64) erro
 	return err
 }
 
+// Set устанавливает значение метрики типа gauge.
 func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		_, err := p.db.Exec(ctx,
@@ -51,6 +57,7 @@ func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) er
 	return err
 }
 
+// Counters возвращает карту всех метрик типа counter.
 func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
 	var result map[string]int64
 	err := retry.Do(ctx, isRetriablePG, func() error {
@@ -78,6 +85,7 @@ func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
 	return result
 }
 
+// Gauges возвращает карту всех метрик типа gauge.
 func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
 	var result map[string]float64
 	err := retry.Do(ctx, isRetriablePG, func() error {
@@ -104,6 +112,8 @@ func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
 	return result
 }
 
+// GetCounter возвращает значение метрики counter.
+// Возвращает false, если метрика не найдена.
 func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bool) {
 	var value int64
 	err := retry.Do(ctx, isRetriablePG, func() error {
@@ -119,6 +129,8 @@ func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bo
 	return value, true
 }
 
+// GetGauge возвращает значение метрики gauge.
+// Возвращает false, если метрика не найдена.
 func (p *PsgsRepository) GetGauge(ctx context.Context, name string) (float64, bool) {
 	var value float64
 	err := retry.Do(ctx, isRetriablePG, func() error {
@@ -134,6 +146,7 @@ func (p *PsgsRepository) GetGauge(ctx context.Context, name string) (float64, bo
 	return value, true
 }
 
+// UpdateBatch обновляет пакет метрик.
 func (p *PsgsRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
 	return retry.Do(ctx, isRetriablePG, func() error {
 		tx, err := p.db.Begin(ctx)
@@ -168,6 +181,7 @@ func (p *PsgsRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) er
 	})
 }
 
+// New инициализирует подключение к базе данных и возвращает экземпляр PsgsRepository.
 func New(db *pgxpool.Pool, logger *zap.Logger, dsn string) (*PsgsRepository, error) {
 	err := runMigrations(dsn)
 	if err != nil {
@@ -176,6 +190,7 @@ func New(db *pgxpool.Pool, logger *zap.Logger, dsn string) (*PsgsRepository, err
 	return &PsgsRepository{db: db, logger: logger}, err
 }
 
+// runMigrations применяет SQL-миграции к базе данных.
 func runMigrations(dsn string) error {
 	src, err := iofs.New(migrations.FS, ".")
 	if err != nil {
@@ -192,6 +207,7 @@ func runMigrations(dsn string) error {
 	return nil
 }
 
+// isRetriablePG определяет, является ли ошибка PostgreSQL временной или повторной.
 func isRetriablePG(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -201,6 +217,7 @@ func isRetriablePG(err error) bool {
 	return false
 }
 
+// Ping проверяет доступность базы данных и логирует время отклика.
 func (p *PsgsRepository) Ping(ctx context.Context) error {
 	start := time.Now()
 	if err := p.db.Ping(ctx); err != nil {

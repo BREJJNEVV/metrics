@@ -14,10 +14,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// Update обрабатывает POST запросы на пути /update/:type/:name/:value.
+// Принимает параметры в пути запроса.
+// Требует заголовок Content-Type: text/plain или его отсутствие.
+// Возвращает HTTP 200, при успешном обновлении.
+// Возвращает HTTP 400, при невалидном типе, имени или значении метрики.
+// Возвращает HTTP 500, при ошибке сохранения в репозитории.
 func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct != "" && !strings.HasPrefix(ct, "text/plain") {
-		http.Error(w, "wrong Content-Type", http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -28,7 +34,7 @@ func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if request.name == "" {
-		http.Error(w, "Not found", http.StatusNotFound)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -36,7 +42,7 @@ func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	case model.Gauge:
 		fGauge, err := strconv.ParseFloat(request.value, 64)
 		if err != nil {
-			http.Error(w, "status bad request", http.StatusBadRequest)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 		err = ms.repo.Set(r.Context(), request.name, fGauge)
@@ -52,7 +58,7 @@ func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 	case model.Counter:
 		icounter, err := strconv.ParseInt(request.value, 10, 64)
 		if err != nil {
-			http.Error(w, "status bad request", http.StatusBadRequest)
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 		err = ms.repo.Add(r.Context(), request.name, icounter)
@@ -67,7 +73,7 @@ func (ms *MetricService) Update(w http.ResponseWriter, r *http.Request) {
 		}
 
 	default:
-		http.Error(w, "status bad request", http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 

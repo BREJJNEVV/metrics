@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,6 +9,22 @@ import (
 
 	"go.uber.org/zap"
 )
+
+func ExampleMetricService_UpdatesJSON() {
+	mock := &mockRepository{}
+	notifier := &mockNotifier{}
+	service := MetricService{repo: mock, logger: zap.NewNop(), audit: notifier}
+
+	req := httptest.NewRequest(http.MethodPost, "/update", strings.NewReader(`[{"id":"Alloc","type":"gauge","value":1},{"id":"PollCount","type":"counter","delta":5}]`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	service.UpdatesJSON(w, req)
+
+	fmt.Println(w.Code)
+
+	// Output:
+	// 200
+}
 
 func TestUpdatesJSON(t *testing.T) {
 	tests := []struct {

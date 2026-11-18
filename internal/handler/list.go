@@ -7,6 +7,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// ListMetrics обрабатывет GET запросы на пути `/`.
+// Ничего не принимает.
+// Возвращает HTML-страницу со списком всех записанных метрик (Gauge и Counter).
+// Возвращает HTTP 500 при неудачном извлечении данных или рендеринга шаблона.
 func (ms *MetricService) ListMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -26,6 +30,9 @@ func (ms *MetricService) ListMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// tmpl представляет собой HTML-шаблон для отображения страницы метрик.
+// Ожидает на вход структуру, содержащую поля Gauges (map[string]float64)
+// и Counters (map[string]int64).
 var tmpl = template.Must(template.New("metrics").Parse(` 
 <html>
 <body>

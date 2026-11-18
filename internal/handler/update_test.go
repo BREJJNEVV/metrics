@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,6 +34,26 @@ type mockNotifier struct {
 
 func (m *mockNotifier) Notify(e audit.Event) {
 	m.events = append(m.events, e)
+}
+
+func ExampleMetricService_Update() {
+	mock := &mockRepository{}
+	updHandler := MetricService{
+		repo:  mock,
+		audit: &mockNotifier{},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/123.45", nil)
+	req.Header.Set("Content-Type", "text/plain")
+	r := chi.NewRouter()
+	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", updHandler.Update)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	fmt.Println(w.Code)
+
+	// Output:
+	// 200
 }
 
 func TestUpdateGauge(t *testing.T) {
@@ -124,7 +145,7 @@ func TestUpdateErrors(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/gauge//1.23",
 			contentType: "text/plain",
-			code:        http.StatusNotFound,
+			code:        http.StatusBadRequest,
 		},
 		{
 			name:        "missing value",
@@ -173,7 +194,7 @@ func TestUpdateErrors(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			if w.Code != tt.code {
-				t.Errorf("expected status %d, got %d", w.Code, tt.code)
+				t.Errorf("expected status %d, got %d", tt.code, w.Code)
 			}
 			if mock.AddCall || mock.SetCall {
 				t.Error("no repo methods should be called")

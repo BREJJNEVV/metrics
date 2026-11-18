@@ -1,3 +1,4 @@
+// Package audit предоставляет механизмы для асинхронного сбора и отправки событий.
 package audit
 
 import (
@@ -12,31 +13,43 @@ import (
 	"go.uber.org/zap"
 )
 
+// Observer определяет контракт для обработчиков событий аудита.
 type Observer interface {
+	// Handle обрабатывает переданное событие.
 	Handle(event Event) error
 }
 
+// Auditor координирует подписанных наблюдателей.
 type Auditor struct {
 	observers []Observer
 	logger    *zap.Logger
 }
 
+// URLObserver реализует Observer для доставки событий на удалённый HTTP-эндпоинт.
 type URLObserver struct {
 	url    string
 	client *http.Client
 }
 
+// FileObserver реализует Observer для записи событий в локальный файл.
 type FileObserver struct {
 	path string
 	mu   sync.Mutex
 }
 
+// Event предоставляет событие аудита, содержащее метаданные о произошедшем действии.
 type Event struct {
-	TS      int64    `json:"ts"`
+	// TS - время создания события.
+	TS int64 `json:"ts"`
+
+	// Metrics - слайс имён метрик.
 	Metrics []string `json:"metrics"`
-	IPAddr  string   `json:"ip_address"`
+
+	// IPAddr - адрес отправки события.
+	IPAddr string `json:"ip_address"`
 }
 
+// Notify рассылает событие наблюдателям.
 func (a *Auditor) Notify(e Event) {
 	for _, obs := range a.observers {
 		if err := obs.Handle(e); err != nil {
@@ -45,6 +58,7 @@ func (a *Auditor) Notify(e Event) {
 	}
 }
 
+// Handle записывает событие в файл в формате JSON.
 func (fo *FileObserver) Handle(event Event) error {
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -68,6 +82,7 @@ func (fo *FileObserver) Handle(event Event) error {
 	return nil
 }
 
+// Handle отправляет событие по HTTP методом POST.
 func (uo *URLObserver) Handle(event Event) error {
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -94,6 +109,7 @@ func (uo *URLObserver) Handle(event Event) error {
 	return nil
 }
 
+// NewAuditor создает новый экземпляр Auditor.
 func NewAuditor(logger *zap.Logger) *Auditor {
 	return &Auditor{
 		observers: []Observer{},
@@ -101,10 +117,12 @@ func NewAuditor(logger *zap.Logger) *Auditor {
 	}
 }
 
+// Subscribe добавляет нового наблюдателя в список рассылки.
 func (a *Auditor) Subscribe(o Observer) {
 	a.observers = append(a.observers, o)
 }
 
+// NewFileObserver создает новый FileObserver.
 func NewFileObserver(path string) *FileObserver {
 	return &FileObserver{
 		path: path,
@@ -112,6 +130,7 @@ func NewFileObserver(path string) *FileObserver {
 	}
 }
 
+// NewURLObserver создает новый URLObserver.
 func NewURLObserver(url string, client *http.Client) *URLObserver {
 	return &URLObserver{
 		url:    url,

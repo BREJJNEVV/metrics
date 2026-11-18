@@ -136,7 +136,7 @@ func TestSyncSaver(t *testing.T) {
 	ctx := context.Background()
 
 	base := memory.Create()
-	saver := CreateSyncSaver(base, path)
+	saver := NewSyncSaver(base, path)
 
 	_ = saver.Set(ctx, "Alloc", 100)
 	_ = saver.Add(ctx, "PollCount", 3)

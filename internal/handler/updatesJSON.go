@@ -20,6 +20,12 @@ var bufferPool = sync.Pool{
 	},
 }
 
+// UpdatesJSON обрабатывает POST запросы на пути /updates.
+// Принимает батч метрик в формате JSON в теле запроса.
+// Требует заголовок Content-Type: application/json.
+// Возвращает HTTP 200 при успешном обновлении.
+// Возвращает HTTP 400 при невалидном типе, имени или значении метрики.
+// Возвращает HTTP 500 при ошибке сохранения в репозитории.
 func (ms *MetricService) UpdatesJSON(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" || !strings.HasPrefix(ct, "application/json") {

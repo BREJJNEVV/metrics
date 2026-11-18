@@ -26,7 +26,6 @@ import (
 )
 
 func main() {
-
 	var repo handler.Repository
 	var pinger handler.Pinger
 	var db *pgxpool.Pool
@@ -81,7 +80,7 @@ func main() {
 				}
 			}()
 		} else {
-			prstsNew := persistence.CreateSyncSaver(storage, fl.StoragePath)
+			prstsNew := persistence.NewSyncSaver(storage, fl.StoragePath)
 			repo = prstsNew
 			pinger = prstsNew
 		}
@@ -98,7 +97,7 @@ func main() {
 	if fl.auditURL != "" {
 		auditor.Subscribe(audit.NewURLObserver(fl.auditURL, &http.Client{Timeout: 5 * time.Second}))
 	}
-	service := handler.CreateMetricService(repo, logger, auditor)
+	service := handler.NewMetricService(repo, logger, auditor)
 	healthHandler := handler.NewHealthHandler(pinger, logger)
 
 	r := chi.NewRouter()

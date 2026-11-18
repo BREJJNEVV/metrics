@@ -1,13 +1,36 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi"
 	"go.uber.org/zap"
 )
+
+func ExampleMetricService_GetValueJSON() {
+	mock := &mockRepository{
+		gauge:   map[string]float64{"Alloc": 123.45},
+		counter: nil,
+	}
+	service := MetricService{repo: mock, logger: zap.NewNop()}
+
+	req := httptest.NewRequest(http.MethodPost, "/value", strings.NewReader(`{"id":"Alloc","type":"gauge"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	service.GetValueJSON(w, req)
+
+	r := chi.NewRouter()
+	r.ServeHTTP(w, req)
+
+	fmt.Println(w.Code)
+
+	// Output:
+	// 200
+}
 
 func TestGetValueJSON(t *testing.T) {
 	tests := []struct {

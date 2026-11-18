@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +17,18 @@ type mockPinger struct {
 
 func (m *mockPinger) Ping(ctx context.Context) error {
 	return m.err
+}
+
+func ExampleHealthHandler_Ping() {
+	h := NewHealthHandler(&mockPinger{err: nil}, zap.NewNop())
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	w := httptest.NewRecorder()
+	h.Ping(w, req)
+
+	fmt.Println(w.Code)
+
+	// Output:
+	// 200
 }
 
 func TestHealthHandler_Ping(t *testing.T) {

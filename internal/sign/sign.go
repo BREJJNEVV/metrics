@@ -1,3 +1,4 @@
+// Package sign предоставляет функции для вычисления и проверки HMAC-SHA256 подписи данных.
 package sign
 
 import (
@@ -6,6 +7,7 @@ import (
 	"encoding/base64"
 )
 
+// Sign вычисляет HMAC-SHA256 подпись данных и возвращает её в формате Base64.
 func Sign(data []byte, key string) string {
 	h := hmac.New(sha256.New, []byte(key))
 	h.Write(data)
@@ -13,6 +15,7 @@ func Sign(data []byte, key string) string {
 
 }
 
+// Verify проверяет соответствие переданной подписи вычисленной HMAC-SHA256 подписи данных.
 func Verify(data []byte, key string, hash string) bool {
 	h := hmac.New(sha256.New, []byte(key))
 	h.Write(data)

@@ -8,6 +8,12 @@ import (
 	"github.com/BREJJNEVV/metrics/internal/model"
 )
 
+// GetValueJSON обрабатывает POST-запросы на пути /value.
+// Принимает тип и имя метрики в формате JSON в теле запроса.
+// Требует заголовок Content-Type: application/json.
+// Возвращает HTTP 200 OK и JSON с текущим значением метрики.
+// Возвращает HTTP 400 Bad Request при невалидном запросе или неизвестном типе.
+// Возвращает HTTP 404 Not Found, если метрика с таким именем не найдена.
 func (ms *MetricService) GetValueJSON(w http.ResponseWriter, r *http.Request) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" || !strings.HasPrefix(ct, "application/json") {
@@ -19,7 +25,7 @@ func (ms *MetricService) GetValueJSON(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -46,7 +52,7 @@ func (ms *MetricService) GetValueJSON(w http.ResponseWriter, r *http.Request) {
 		request.Delta = &val
 
 	default:
-		http.Error(w, "unexpected type of metric", http.StatusBadRequest)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusOK)

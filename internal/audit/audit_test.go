@@ -3,6 +3,7 @@ package audit
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -18,7 +19,10 @@ import (
 func TestFileObserver_Handle(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "audit.log")
-	obs := NewFileObserver(path)
+	obs, err := NewFileObserver(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	event := Event{
 		TS:      12345678,
@@ -58,7 +62,10 @@ func TestFileObserver_Handle(t *testing.T) {
 func TestFileObserver_Appends(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "audit.log")
-	obs := NewFileObserver(path)
+	obs, err := NewFileObserver(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	e1 := Event{TS: 1, Metrics: []string{"A"}, IPAddr: "1.1.1.1"}
 	e2 := Event{TS: 2, Metrics: []string{"B"}, IPAddr: "2.2.2.2"}
@@ -157,8 +164,9 @@ func (m *mockObserver) Handle(e Event) error {
 }
 
 func TestAuditor_Notify(t *testing.T) {
+	ctx := context.Background()
 	logger := zap.NewNop()
-	a := NewAuditor(logger)
+	a := NewAuditor(ctx, logger)
 
 	o1 := &mockObserver{}
 	o2 := &mockObserver{}
@@ -167,6 +175,7 @@ func TestAuditor_Notify(t *testing.T) {
 
 	event := Event{TS: 7, Metrics: []string{"M"}, IPAddr: "0.0.0.0"}
 	a.Notify(event)
+	a.Shutdown()
 
 	if len(o1.events) != 1 || o1.events[0].TS != 7 {
 		t.Errorf("o1 didn't receive event: %+v", o1.events)
@@ -177,8 +186,9 @@ func TestAuditor_Notify(t *testing.T) {
 }
 
 func TestAuditor_NotifyContinuesOnError(t *testing.T) {
+	ctx := context.Background()
 	logger := zap.NewNop()
-	a := NewAuditor(logger)
+	a := NewAuditor(ctx, logger)
 
 	bad := &mockObserver{err: io.ErrUnexpectedEOF}
 	good := &mockObserver{}
@@ -186,15 +196,16 @@ func TestAuditor_NotifyContinuesOnError(t *testing.T) {
 	a.Subscribe(good)
 
 	a.Notify(Event{TS: 1})
-
+	a.Shutdown()
 	if len(good.events) != 1 {
 		t.Error("good observer should still receive event after bad one failed")
 	}
 }
 
 func TestAuditor_NotifyNoObservers(t *testing.T) {
+	ctx := context.Background()
 	logger := zap.NewNop()
-	a := NewAuditor(logger)
+	a := NewAuditor(ctx, logger)
 
 	a.Notify(Event{TS: 1})
 }

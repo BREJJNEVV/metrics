@@ -82,6 +82,7 @@ func (ms *MetricService) UpdatesJSON(w http.ResponseWriter, r *http.Request) {
 	for _, v := range requests {
 		metricsName = append(metricsName, v.ID)
 	}
+
 	ms.audit.Notify(audit.Event{
 		TS:      time.Now().Unix(),
 		Metrics: metricsName,

@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/BREJJNEVV/metrics/internal/audit"
@@ -29,7 +31,8 @@ func main() {
 	var repo handler.Repository
 	var pinger handler.Pinger
 	var db *pgxpool.Pool
-	ctx := context.TODO()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
@@ -90,9 +93,13 @@ func main() {
 		pinger = mem
 	}
 
-	auditor := audit.NewAuditor(logger)
+	auditor := audit.NewAuditor(ctx, logger)
 	if fl.auditFile != "" {
-		auditor.Subscribe(audit.NewFileObserver(fl.auditFile))
+		fo, err := audit.NewFileObserver(fl.auditFile)
+		if err != nil {
+			logger.Fatal("observer file error", zap.Error(err))
+		}
+		auditor.Subscribe(fo)
 	}
 	if fl.auditURL != "" {
 		auditor.Subscribe(audit.NewURLObserver(fl.auditURL, &http.Client{Timeout: 5 * time.Second}))
@@ -136,9 +143,21 @@ func main() {
 	}
 
 	logger.Info("Server started", zap.String("address", fl.Address))
-	if err := srv.ListenAndServe(); err != nil {
-		logger.Fatal("server stopped with error", zap.Error(err))
-	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server error", zap.Error(err))
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_ = srv.Shutdown(shutdownCtx)
+	auditor.Shutdown()
+	logger.Info("Shutdown complete")
 }
 
 type flags struct {

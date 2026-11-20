@@ -30,14 +30,14 @@ const queryInsertCounter string = `INSERT INTO counter_metrics (name, value)
      ON CONFLICT (name) DO UPDATE 
      SET value = counter_metrics.value + EXCLUDED.value`
 
-// PsgsRepository предоставляет доступ к хранилищу метрик в PostgreSQL.
-type PsgsRepository struct {
+// PostgresRepository предоставляет доступ к хранилищу метрик в PostgreSQL.
+type PostgresRepository struct {
 	db     *pgxpool.Pool
 	logger *zap.Logger
 }
 
 // Add увеличивает значение метрики типа counter.
-func (p *PsgsRepository) Add(ctx context.Context, name string, value int64) error {
+func (p *PostgresRepository) Add(ctx context.Context, name string, value int64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		_, err := p.db.Exec(ctx, queryInsertCounter, name, value)
 		return err
@@ -46,7 +46,7 @@ func (p *PsgsRepository) Add(ctx context.Context, name string, value int64) erro
 }
 
 // Set устанавливает значение метрики типа gauge.
-func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) error {
+func (p *PostgresRepository) Set(ctx context.Context, name string, value float64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		_, err := p.db.Exec(ctx,
 			queryInsertGauge,
@@ -58,7 +58,7 @@ func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) er
 }
 
 // Counters возвращает карту всех метрик типа counter.
-func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
+func (p *PostgresRepository) Counters(ctx context.Context) map[string]int64 {
 	var result map[string]int64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		result = make(map[string]int64)
@@ -86,7 +86,7 @@ func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
 }
 
 // Gauges возвращает карту всех метрик типа gauge.
-func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
+func (p *PostgresRepository) Gauges(ctx context.Context) map[string]float64 {
 	var result map[string]float64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		result = make(map[string]float64)
@@ -114,7 +114,7 @@ func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
 
 // GetCounter возвращает значение метрики counter.
 // Возвращает false, если метрика не найдена.
-func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bool) {
+func (p *PostgresRepository) GetCounter(ctx context.Context, name string) (int64, bool) {
 	var value int64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		row := p.db.QueryRow(ctx, `SELECT value FROM counter_metrics WHERE name = $1`, name)
@@ -131,7 +131,7 @@ func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bo
 
 // GetGauge возвращает значение метрики gauge.
 // Возвращает false, если метрика не найдена.
-func (p *PsgsRepository) GetGauge(ctx context.Context, name string) (float64, bool) {
+func (p *PostgresRepository) GetGauge(ctx context.Context, name string) (float64, bool) {
 	var value float64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		row := p.db.QueryRow(ctx, `SELECT value FROM gauge_metrics WHERE name = $1`, name)
@@ -147,7 +147,7 @@ func (p *PsgsRepository) GetGauge(ctx context.Context, name string) (float64, bo
 }
 
 // UpdateBatch обновляет пакет метрик.
-func (p *PsgsRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
+func (p *PostgresRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
 	return retry.Do(ctx, isRetriablePG, func() error {
 		tx, err := p.db.Begin(ctx)
 		if err != nil {
@@ -181,13 +181,13 @@ func (p *PsgsRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) er
 	})
 }
 
-// New инициализирует подключение к базе данных и возвращает экземпляр PsgsRepository.
-func New(db *pgxpool.Pool, logger *zap.Logger, dsn string) (*PsgsRepository, error) {
+// New инициализирует подключение к базе данных и возвращает экземпляр PostgresRepository.
+func New(db *pgxpool.Pool, logger *zap.Logger, dsn string) (*PostgresRepository, error) {
 	err := runMigrations(dsn)
 	if err != nil {
 		return nil, err
 	}
-	return &PsgsRepository{db: db, logger: logger}, err
+	return &PostgresRepository{db: db, logger: logger}, err
 }
 
 // runMigrations применяет SQL-миграции к базе данных.
@@ -218,7 +218,7 @@ func isRetriablePG(err error) bool {
 }
 
 // Ping проверяет доступность базы данных и логирует время отклика.
-func (p *PsgsRepository) Ping(ctx context.Context) error {
+func (p *PostgresRepository) Ping(ctx context.Context) error {
 	start := time.Now()
 	if err := p.db.Ping(ctx); err != nil {
 		return err

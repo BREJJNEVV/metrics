@@ -55,7 +55,7 @@ type metricRequest struct {
 // Notifier определяет контракт для отправки событий аудита.
 type Notifier interface {
 	// Notify отправляет событие в систему аудита.
-	Notify(event audit.Event)
+	Notify(ыevent audit.Event)
 }
 
 // NewMetricService создает новый экземпляр MetricService.

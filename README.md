@@ -144,7 +144,7 @@ metrics/
 │   ├── persistence/         # файловое хранилище (atomic write)
 │   ├── repository/
 │   │   ├── memory/          # MemStorage с sync.Mutex
-│   │   └── postgres/        # PsgsRepository на pgxpool
+│   │   └── postgres/        # PostgresRepository на pgxpool
 │   ├── retry/               # универсальный retry.Do с предикатом
 │   └── sign/                # HMAC-SHA256 подпись (base64)
 ├── migrations/              # SQL-миграции + go:embed

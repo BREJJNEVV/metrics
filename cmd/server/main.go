@@ -173,7 +173,7 @@ type flags struct {
 
 func setFlagsEnv() (flags, error) {
 	address := flag.String("a", "localhost:8080", "endpoint address")
-	interval := flag.Int64("i", 5, "store interval")
+	interval := flag.Int64("i", 300, "store interval")
 	storagePath := flag.String("f", "", "storage path")
 	restore := flag.Bool("r", false, "restore data or not")
 	dbDSN := flag.String("d", "", "address db connection")

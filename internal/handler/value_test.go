@@ -2,12 +2,37 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi"
 )
+
+func ExampleMetricService_GetValue() {
+	mock := &mockRepository{
+		gauge:   map[string]float64{"Alloc": 123.45},
+		counter: nil,
+	}
+	handler := MetricService{
+		repo: mock,
+	}
+
+	r := chi.NewRouter()
+	r.Get("/value/{type}/{name}", handler.GetValue)
+
+	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	fmt.Println(w.Code)
+	fmt.Println(w.Body.String())
+
+	// Output:
+	// 200
+	// 123.45
+}
 
 func TestGetValue(t *testing.T) {
 	tests := []struct {
@@ -47,7 +72,7 @@ func TestGetValue(t *testing.T) {
 			mockGauge:   map[string]float64{},
 			mockCounter: nil,
 			wantCode:    http.StatusNotFound,
-			wantBody:    "metric not found\n",
+			wantBody:    http.StatusText(http.StatusNotFound) + "\n",
 			wantCT:      "text/plain; charset=utf-8",
 		},
 		{
@@ -57,7 +82,7 @@ func TestGetValue(t *testing.T) {
 			mockGauge:   nil,
 			mockCounter: nil,
 			wantCode:    http.StatusBadRequest,
-			wantBody:    "unexpected type of metric\n",
+			wantBody:    http.StatusText(http.StatusBadRequest) + "\n",
 			wantCT:      "text/plain; charset=utf-8",
 		},
 	}

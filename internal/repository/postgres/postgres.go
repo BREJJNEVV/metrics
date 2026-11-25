@@ -1,3 +1,4 @@
+// Package postgres определяет интерфейс хранилища метрик в PostgreSQL.
 package postgres
 
 import (
@@ -17,22 +18,26 @@ import (
 	"go.uber.org/zap"
 )
 
+// queryInsertGauge содержит SQL-запрос для сохранения или обновления метрики типа gauge.
 const queryInsertGauge string = `INSERT INTO gauge_metrics (name, value)
      VALUES ($1, $2)
      ON CONFLICT (name) DO UPDATE 
-	 SET value = EXCLUDED.value`
+     SET value = EXCLUDED.value`
 
+// queryInsertCounter содержит SQL-запрос для увеличения значения метрики типа counter.
 const queryInsertCounter string = `INSERT INTO counter_metrics (name, value)
      VALUES ($1, $2)
      ON CONFLICT (name) DO UPDATE 
-	 SET value = counter_metrics.value + EXCLUDED.value`
+     SET value = counter_metrics.value + EXCLUDED.value`
 
-type PsgsRepository struct {
+// PostgresRepository предоставляет доступ к хранилищу метрик в PostgreSQL.
+type PostgresRepository struct {
 	db     *pgxpool.Pool
 	logger *zap.Logger
 }
 
-func (p *PsgsRepository) Add(ctx context.Context, name string, value int64) error {
+// Add увеличивает значение метрики типа counter.
+func (p *PostgresRepository) Add(ctx context.Context, name string, value int64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		_, err := p.db.Exec(ctx, queryInsertCounter, name, value)
 		return err
@@ -40,7 +45,8 @@ func (p *PsgsRepository) Add(ctx context.Context, name string, value int64) erro
 	return err
 }
 
-func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) error {
+// Set устанавливает значение метрики типа gauge.
+func (p *PostgresRepository) Set(ctx context.Context, name string, value float64) error {
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		_, err := p.db.Exec(ctx,
 			queryInsertGauge,
@@ -51,7 +57,8 @@ func (p *PsgsRepository) Set(ctx context.Context, name string, value float64) er
 	return err
 }
 
-func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
+// Counters возвращает карту всех метрик типа counter.
+func (p *PostgresRepository) Counters(ctx context.Context) map[string]int64 {
 	var result map[string]int64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		result = make(map[string]int64)
@@ -78,7 +85,8 @@ func (p *PsgsRepository) Counters(ctx context.Context) map[string]int64 {
 	return result
 }
 
-func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
+// Gauges возвращает карту всех метрик типа gauge.
+func (p *PostgresRepository) Gauges(ctx context.Context) map[string]float64 {
 	var result map[string]float64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		result = make(map[string]float64)
@@ -104,7 +112,9 @@ func (p *PsgsRepository) Gauges(ctx context.Context) map[string]float64 {
 	return result
 }
 
-func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bool) {
+// GetCounter возвращает значение метрики counter.
+// Возвращает false, если метрика не найдена.
+func (p *PostgresRepository) GetCounter(ctx context.Context, name string) (int64, bool) {
 	var value int64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		row := p.db.QueryRow(ctx, `SELECT value FROM counter_metrics WHERE name = $1`, name)
@@ -119,7 +129,9 @@ func (p *PsgsRepository) GetCounter(ctx context.Context, name string) (int64, bo
 	return value, true
 }
 
-func (p *PsgsRepository) GetGauge(ctx context.Context, name string) (float64, bool) {
+// GetGauge возвращает значение метрики gauge.
+// Возвращает false, если метрика не найдена.
+func (p *PostgresRepository) GetGauge(ctx context.Context, name string) (float64, bool) {
 	var value float64
 	err := retry.Do(ctx, isRetriablePG, func() error {
 		row := p.db.QueryRow(ctx, `SELECT value FROM gauge_metrics WHERE name = $1`, name)
@@ -134,7 +146,8 @@ func (p *PsgsRepository) GetGauge(ctx context.Context, name string) (float64, bo
 	return value, true
 }
 
-func (p *PsgsRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
+// UpdateBatch обновляет пакет метрик.
+func (p *PostgresRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) error {
 	return retry.Do(ctx, isRetriablePG, func() error {
 		tx, err := p.db.Begin(ctx)
 		if err != nil {
@@ -168,14 +181,16 @@ func (p *PsgsRepository) UpdateBatch(ctx context.Context, mr []model.Metrics) er
 	})
 }
 
-func New(db *pgxpool.Pool, logger *zap.Logger, dsn string) (*PsgsRepository, error) {
+// New инициализирует подключение к базе данных и возвращает экземпляр PostgresRepository.
+func New(db *pgxpool.Pool, logger *zap.Logger, dsn string) (*PostgresRepository, error) {
 	err := runMigrations(dsn)
 	if err != nil {
 		return nil, err
 	}
-	return &PsgsRepository{db: db, logger: logger}, err
+	return &PostgresRepository{db: db, logger: logger}, err
 }
 
+// runMigrations применяет SQL-миграции к базе данных.
 func runMigrations(dsn string) error {
 	src, err := iofs.New(migrations.FS, ".")
 	if err != nil {
@@ -192,6 +207,7 @@ func runMigrations(dsn string) error {
 	return nil
 }
 
+// isRetriablePG определяет, является ли ошибка PostgreSQL временной или повторной.
 func isRetriablePG(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -201,7 +217,8 @@ func isRetriablePG(err error) bool {
 	return false
 }
 
-func (p *PsgsRepository) Ping(ctx context.Context) error {
+// Ping проверяет доступность базы данных и логирует время отклика.
+func (p *PostgresRepository) Ping(ctx context.Context) error {
 	start := time.Now()
 	if err := p.db.Ping(ctx); err != nil {
 		return err

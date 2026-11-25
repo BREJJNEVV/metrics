@@ -1,3 +1,4 @@
+// Package compress предоставляет утилиты для сжатия и распаковки данных алгоритмом gzip.
 package compress
 
 import (
@@ -8,6 +9,7 @@ import (
 
 const level = gzip.BestCompression
 
+// Compress сжимает данные алгоритмом gzip.
 func Compress(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	w, err := gzip.NewWriterLevel(&buf, level)
@@ -24,6 +26,7 @@ func Compress(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Decompress распаковывает данные, сжатые алгоритмом gzip.
 func Decompress(data []byte) ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {

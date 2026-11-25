@@ -2,32 +2,64 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/BREJJNEVV/metrics/internal/audit"
 	"github.com/BREJJNEVV/metrics/internal/model"
 	"github.com/go-chi/chi"
 )
 
 type mockRepository struct {
-	AddCall  bool
-	AddName  string
-	AddValue int64
-	SetCall  bool
-	SetName  string
-	SetValue float64
-	GetCall  bool
+	gauge       map[string]float64
+	counter     map[string]int64
+	AddName     string
+	SetName     string
+	BatchArg    []model.Metrics
+	AddValue    int64
+	SetValue    float64
+	AddCall     bool
+	SetCall     bool
+	GetCall     bool
+	BatchCalled bool
+}
 
-	gauge   map[string]float64
-	counter map[string]int64
+type mockNotifier struct {
+	events []audit.Event
+}
+
+func (m *mockNotifier) Notify(e audit.Event) {
+	m.events = append(m.events, e)
+}
+
+func ExampleMetricService_Update() {
+	mock := &mockRepository{}
+	updHandler := MetricService{
+		repo:  mock,
+		audit: &mockNotifier{},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/123.45", nil)
+	req.Header.Set("Content-Type", "text/plain")
+	r := chi.NewRouter()
+	r.Post("/update/{type:.*}/{name:.*}/{value:.*}", updHandler.Update)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	fmt.Println(w.Code)
+
+	// Output:
+	// 200
 }
 
 func TestUpdateGauge(t *testing.T) {
 
 	mock := &mockRepository{}
 	updHandler := MetricService{
-		repo: mock,
+		repo:  mock,
+		audit: &mockNotifier{},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/123.45", nil)
@@ -60,7 +92,8 @@ func TestUpdateCounter(t *testing.T) {
 
 	mock := &mockRepository{}
 	updHandler := MetricService{
-		repo: mock,
+		repo:  mock,
+		audit: &mockNotifier{},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/update/counter/PollCount/10", nil)
@@ -110,7 +143,7 @@ func TestUpdateErrors(t *testing.T) {
 			method:      http.MethodPost,
 			url:         "/update/gauge//1.23",
 			contentType: "text/plain",
-			code:        http.StatusNotFound,
+			code:        http.StatusBadRequest,
 		},
 		{
 			name:        "missing value",
@@ -145,7 +178,11 @@ func TestUpdateErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockRepository{}
-			service := MetricService{repo: mock}
+
+			service := MetricService{
+				repo:  mock,
+				audit: &mockNotifier{},
+			}
 			req := httptest.NewRequest(tt.method, tt.url, nil)
 
 			r := chi.NewRouter()
@@ -155,7 +192,7 @@ func TestUpdateErrors(t *testing.T) {
 			r.ServeHTTP(w, req)
 
 			if w.Code != tt.code {
-				t.Errorf("expected status %d, got %d", w.Code, tt.code)
+				t.Errorf("expected status %d, got %d", tt.code, w.Code)
 			}
 			if mock.AddCall || mock.SetCall {
 				t.Error("no repo methods should be called")
@@ -180,5 +217,7 @@ func (mr *mockRepository) Add(ctx context.Context, name string, value int64) err
 }
 
 func (mr *mockRepository) UpdateBatch(ctx context.Context, metrics []model.Metrics) error {
+	mr.BatchCalled = true
+	mr.BatchArg = metrics
 	return nil
 }

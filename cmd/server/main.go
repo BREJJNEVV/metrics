@@ -7,26 +7,32 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
+	"github.com/BREJJNEVV/metrics/internal/audit"
 	"github.com/BREJJNEVV/metrics/internal/handler"
 	"github.com/BREJJNEVV/metrics/internal/persistence"
 	"github.com/BREJJNEVV/metrics/internal/repository/memory"
 	"github.com/BREJJNEVV/metrics/internal/repository/postgres"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"go.uber.org/zap"
+
+	_ "net/http/pprof"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-
 	var repo handler.Repository
 	var pinger handler.Pinger
 	var db *pgxpool.Pool
-	ctx := context.TODO()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
@@ -77,7 +83,7 @@ func main() {
 				}
 			}()
 		} else {
-			prstsNew := persistence.CreateSyncSaver(storage, fl.StoragePath)
+			prstsNew := persistence.NewSyncSaver(storage, fl.StoragePath)
 			repo = prstsNew
 			pinger = prstsNew
 		}
@@ -87,7 +93,18 @@ func main() {
 		pinger = mem
 	}
 
-	service := handler.CreateMetricService(repo, logger)
+	auditor := audit.NewAuditor(ctx, logger)
+	if fl.auditFile != "" {
+		fo, err := audit.NewFileObserver(fl.auditFile)
+		if err != nil {
+			logger.Fatal("observer file error", zap.Error(err))
+		}
+		auditor.Subscribe(fo)
+	}
+	if fl.auditURL != "" {
+		auditor.Subscribe(audit.NewURLObserver(fl.auditURL, &http.Client{Timeout: 5 * time.Second}))
+	}
+	service := handler.NewMetricService(repo, logger, auditor)
 	healthHandler := handler.NewHealthHandler(pinger, logger)
 
 	r := chi.NewRouter()
@@ -119,24 +136,39 @@ func main() {
 		r.Post("/value/", service.GetValueJSON)
 	})
 
+	r.Mount("/debug", middleware.Profiler())
 	srv := http.Server{
 		Handler: r,
 		Addr:    fl.Address,
 	}
 
 	logger.Info("Server started", zap.String("address", fl.Address))
-	if err := srv.ListenAndServe(); err != nil {
-		logger.Fatal("server stopped with error", zap.Error(err))
-	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server error", zap.Error(err))
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_ = srv.Shutdown(shutdownCtx)
+	auditor.Shutdown()
+	logger.Info("Shutdown complete")
 }
 
 type flags struct {
 	Address     string `env:"ADDRESS"`
-	Interval    int64  `env:"STORE_INTERVAL"`
 	StoragePath string `env:"FILE_STORAGE_PATH"`
-	Restore     bool   `env:"RESTORE"`
 	dbDSN       string `env:"DATABASE_DSN"`
 	key         string `env:"KEY"`
+	auditFile   string `env:"AUDIT_FILE"`
+	auditURL    string `env:"AUDIT_URL"`
+	Interval    int64  `env:"STORE_INTERVAL"`
+	Restore     bool   `env:"RESTORE"`
 }
 
 func setFlagsEnv() (flags, error) {
@@ -146,6 +178,8 @@ func setFlagsEnv() (flags, error) {
 	restore := flag.Bool("r", false, "restore data or not")
 	dbDSN := flag.String("d", "", "address db connection")
 	key := flag.String("k", "", "secret key")
+	auditFile := flag.String("audit-file", "", "audit file")
+	auditURL := flag.String("audit-url", "", "audit URL")
 	flag.Parse()
 
 	var fl flags
@@ -191,6 +225,17 @@ func setFlagsEnv() (flags, error) {
 		fl.key = env
 	} else {
 		fl.key = *key
+	}
+
+	if env := os.Getenv("AUDIT_FILE"); env != "" {
+		fl.auditFile = env
+	} else {
+		fl.auditFile = *auditFile
+	}
+	if env := os.Getenv("AUDIT_URL"); env != "" {
+		fl.auditURL = env
+	} else {
+		fl.auditURL = *auditURL
 	}
 	return fl, nil
 }

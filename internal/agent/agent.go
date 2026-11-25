@@ -1,3 +1,4 @@
+// Package agent собирает системные метрики и отправляет их.
 package agent
 
 import (
@@ -25,16 +26,27 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 )
 
+// MetricsWriter предоставляет интерфейс для записи метрик.
 type MetricsWriter interface {
+	// SetGauge устанавливает текущее значение метрики типа Gauge.
+	// Если метрика не существует, она будет создана.
 	SetGauge(name string, value float64)
+	// AddCounter увеличивает текущее значение метрики на указанную величину.
+	// Если метрика не существует, она будет создана.
 	AddCounter(name string, value int64)
 }
 
+// MetricsReader предоставляет интерфейс чтения сохраненных метрик.
 type MetricsReader interface {
+	// Gauges возвращает карту значений всех сохраненных метрик типа Gauge.
+	// Ключ — имя метрики, значение — её текущий показатель.
 	Gauges() map[string]float64
+	// Counters возращает карту значений всех сохраненных метрик типа Counter.
+	// Ключ — имя метрики, значение — её текущий показатель.
 	Counters() map[string]int64
 }
 
+// MetricsStorage хранит
 type MetricsStorage struct {
 	counter map[string]int64
 	gauge   map[string]float64
@@ -44,9 +56,9 @@ type MetricsStorage struct {
 type AgentConfig struct {
 	Client  *http.Client
 	Logger  *zap.Logger
+	jobs    chan []model.Metrics
 	BaseURL string
 	Key     string
-	jobs    chan []model.Metrics
 }
 
 func Collect(mw MetricsWriter) {
@@ -137,7 +149,7 @@ func (a *AgentConfig) Submit(batch []model.Metrics) {
 }
 
 func CollectBatch(mr MetricsReader) []model.Metrics {
-	batch := []model.Metrics{}
+	batch := make([]model.Metrics, 0, len(mr.Counters())+len(mr.Gauges()))
 
 	for name, value := range mr.Counters() {
 		v := value
@@ -179,9 +191,9 @@ func (a *AgentConfig) SendBatch(ctx context.Context, batch []model.Metrics) {
 	var statusCode int
 
 	err = retry.Do(ctx, isRetriable, func() error {
-		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
-		if err != nil {
-			return err
+		request, reqErr := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
+		if reqErr != nil {
+			return reqErr
 		}
 		if a.Key != "" {
 			hash := sign.Sign(data, a.Key)
@@ -191,12 +203,12 @@ func (a *AgentConfig) SendBatch(ctx context.Context, batch []model.Metrics) {
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Content-Encoding", "gzip")
 
-		resp, err := a.Client.Do(request)
-		if err != nil {
+		resp, doErr := a.Client.Do(request)
+		if doErr != nil {
 			if resp != nil {
 				_ = resp.Body.Close()
 			}
-			return err
+			return doErr
 		}
 
 		_, _ = io.Copy(io.Discard, resp.Body)

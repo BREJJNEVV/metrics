@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// WithLogging оборачивает хендлер, добавляя логгирование запросов.
 func WithLogging(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +37,7 @@ func WithLogging(logger *zap.Logger) func(http.Handler) http.Handler {
 
 }
 
+// GzipDecompress оборачивает хендлер, добавляя распаковку тела ответа по алгоритму gzip.
 func GzipDecompress(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
@@ -52,16 +54,17 @@ func GzipDecompress(next http.Handler) http.Handler {
 	})
 }
 
-type gzipResponceWriter struct {
+type gzipResponseWriter struct {
 	http.ResponseWriter
 	gz          *gzip.Writer
 	wroteHeader bool
 }
 
+// GzipCompress оборачивает хендлер, добавляя сжатие тела запроса по алгоритму gzip.
 func GzipCompress(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			grw := &gzipResponceWriter{
+			grw := &gzipResponseWriter{
 				ResponseWriter: w,
 			}
 			defer func() {
@@ -76,6 +79,7 @@ func GzipCompress(next http.Handler) http.Handler {
 	})
 }
 
+// HashVerify оборачивает хендлер, добавляя верификацию по алгоритму HashSHA256.
 func HashVerify(key string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +104,21 @@ func HashVerify(key string) func(next http.Handler) http.Handler {
 	}
 }
 
-func (grw *gzipResponceWriter) WriteHeader(statusCode int) {
+// HashSign оборачивает хендлер, добавляя вычисление и установку подписи HashSHA256 в заголовок ответа.
+func HashSign(key string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srw := &signResponseWriter{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(srw, r)
+			body := srw.buf.Bytes()
+			w.Header().Set("HashSHA256", sign.Sign(body, key))
+			w.WriteHeader(srw.status)
+			_, _ = w.Write(body)
+		})
+	}
+}
+
+func (grw *gzipResponseWriter) WriteHeader(statusCode int) {
 	if grw.wroteHeader {
 		return
 	}
@@ -118,7 +136,7 @@ func (grw *gzipResponceWriter) WriteHeader(statusCode int) {
 	grw.ResponseWriter.WriteHeader(statusCode)
 }
 
-func (grw *gzipResponceWriter) Write(data []byte) (int, error) {
+func (grw *gzipResponseWriter) Write(data []byte) (int, error) {
 	if !grw.wroteHeader {
 		grw.WriteHeader(http.StatusOK)
 	}
@@ -128,34 +146,21 @@ func (grw *gzipResponceWriter) Write(data []byte) (int, error) {
 	return grw.ResponseWriter.Write(data)
 }
 
-type signResponceWriter struct {
+type signResponseWriter struct {
 	http.ResponseWriter
 	buf         bytes.Buffer
 	status      int
 	wroteHeader bool
 }
 
-func HashSign(key string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			srw := &signResponceWriter{ResponseWriter: w, status: http.StatusOK}
-			next.ServeHTTP(srw, r)
-			body := srw.buf.Bytes()
-			w.Header().Set("HashSHA256", sign.Sign(body, key))
-			w.WriteHeader(srw.status)
-			_, _ = w.Write(body)
-		})
-	}
-}
-
-func (srw *signResponceWriter) WriteHeader(statusCode int) {
+func (srw *signResponseWriter) WriteHeader(statusCode int) {
 	if srw.wroteHeader {
 		return
 	}
 	srw.status = statusCode
 	srw.wroteHeader = true
 }
-func (srw *signResponceWriter) Write(data []byte) (int, error) {
+func (srw *signResponseWriter) Write(data []byte) (int, error) {
 	if !srw.wroteHeader {
 		srw.WriteHeader(http.StatusOK)
 	}

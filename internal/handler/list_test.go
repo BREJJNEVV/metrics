@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,16 +11,39 @@ import (
 	"github.com/go-chi/chi"
 )
 
+func ExampleMetricService_ListMetrics() {
+
+	mock := &mockRepository{
+		gauge:   map[string]float64{"Alloc": 123.45},
+		counter: nil,
+	}
+	handler := MetricService{
+		repo: mock,
+	}
+
+	r := chi.NewRouter()
+	r.Get("/", handler.ListMetrics)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	fmt.Println(w.Code)
+
+	// Output:
+	// 200
+}
+
 func TestListMetrics(t *testing.T) {
 
 	tests := []struct {
-		name        string
-		method      string
 		mockGauge   map[string]float64
 		mockCounter map[string]int64
+		name        string
+		method      string
 		wantCT      string
-		wantCode    int
 		wantBody    string
+		wantCode    int
 	}{
 		{
 			name:        "all ok",

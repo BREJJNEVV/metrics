@@ -36,14 +36,14 @@ func ExampleMetricService_GetValue() {
 
 func TestGetValue(t *testing.T) {
 	tests := []struct {
+		mockGauge   map[string]float64
+		mockCounter map[string]int64
 		name        string
 		method      string
 		url         string
-		mockGauge   map[string]float64
-		mockCounter map[string]int64
-		wantCode    int
 		wantBody    string
 		wantCT      string
+		wantCode    int
 	}{
 		{
 			name:        "get gauge ok",

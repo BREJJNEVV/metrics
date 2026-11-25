@@ -30,10 +30,10 @@ func TestUpdateJSON(t *testing.T) {
 		name       string
 		body       string
 		ct         string
+		wantMetric string
 		wantCode   int
 		wantSet    bool
 		wantAdd    bool
-		wantMetric string
 	}{
 		{
 			name:       "gauge ok",

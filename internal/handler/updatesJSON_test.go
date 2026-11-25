@@ -31,9 +31,9 @@ func TestUpdatesJSON(t *testing.T) {
 		name        string
 		body        string
 		ct          string
+		wantMetrics []string
 		wantCode    int
 		wantBatch   bool
-		wantMetrics []string
 	}{
 		{
 			name:        "batch ok",

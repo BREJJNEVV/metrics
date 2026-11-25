@@ -13,19 +13,17 @@ import (
 )
 
 type mockRepository struct {
-	AddCall  bool
-	AddName  string
-	AddValue int64
-	SetCall  bool
-	SetName  string
-	SetValue float64
-	GetCall  bool
-
-	BatchCalled bool
+	gauge       map[string]float64
+	counter     map[string]int64
+	AddName     string
+	SetName     string
 	BatchArg    []model.Metrics
-
-	gauge   map[string]float64
-	counter map[string]int64
+	AddValue    int64
+	SetValue    float64
+	AddCall     bool
+	SetCall     bool
+	GetCall     bool
+	BatchCalled bool
 }
 
 type mockNotifier struct {

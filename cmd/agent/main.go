@@ -15,9 +15,9 @@ import (
 
 type flags struct {
 	Address        string `env:"ADDRESS"`
+	Key            string `env:"KEY"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
-	Key            string `env:"KEY"`
 	RateLimit      int    `env:"RATE_LIMIT"`
 }
 

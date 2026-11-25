@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func BenchmarkCompress(b *testing.B) {
+	data := []byte("random data for benchmarking comress func")
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := Compress(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDecompress(b *testing.B) {
+	d := []byte("random data for benchmarking comress func")
+	data, _ := Compress(d)
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := Decompress(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func TestDecompressInvalid(t *testing.T) {
 	data := []byte("this is not gzip")
 	_, err := Decompress(data)
@@ -49,20 +72,20 @@ func TestNewWriterReader(t *testing.T) {
 		t.Fatalf("NewWriter failed: %v", err)
 	}
 	data := []byte("hello gzip")
-	if _, err := w.Write(data); err != nil {
-		t.Fatalf("Write failed: %v", err)
+	if _, writeErr := w.Write(data); writeErr != nil {
+		t.Fatalf("Write failed: %v", writeErr)
 	}
 	if err := w.Close(); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
 
-	r, err := NewReader(&buf)
-	if err != nil {
-		t.Fatalf("NewReader failed: %v", err)
+	r, newReaderErr := NewReader(&buf)
+	if newReaderErr != nil {
+		t.Fatalf("NewReader failed: %v", newReaderErr)
 	}
-	restored, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("ReadAll failed: %v", err)
+	restored, readAllErr := io.ReadAll(r)
+	if readAllErr != nil {
+		t.Fatalf("ReadAll failed: %v", readAllErr)
 	}
 	if !bytes.Equal(data, restored) {
 		t.Errorf("mismatch: got %q, want %q", restored, data)

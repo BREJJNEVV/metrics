@@ -46,7 +46,7 @@ type MetricsReader interface {
 	Counters() map[string]int64
 }
 
-// MetricsStorage хранит
+// MetricsStorage хранит метрики
 type MetricsStorage struct {
 	counter map[string]int64
 	gauge   map[string]float64

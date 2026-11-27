@@ -41,7 +41,6 @@ require (
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/kisielk/errcheck v1.30.0
 	github.com/nishanths/predeclared v0.3.1
 	go.uber.org/multierr v1.10.0 // indirect
 )

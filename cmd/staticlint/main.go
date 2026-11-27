@@ -4,10 +4,10 @@ import (
 	"go/ast"
 	"path/filepath"
 
+	"github.com/gostaticanalysis/nilerr"
+	"github.com/nishanths/predeclared/passes/predeclared"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/multichecker"
-
-	// 1. Стандартные анализаторы (отсутствующие в go vet)
 	"golang.org/x/tools/go/analysis/passes/appends"
 	"golang.org/x/tools/go/analysis/passes/atomicalign"
 	"golang.org/x/tools/go/analysis/passes/deepequalerrors"
@@ -33,21 +33,14 @@ import (
 	"golang.org/x/tools/go/analysis/passes/unusedwrite"
 	"golang.org/x/tools/go/analysis/passes/usesgenerics"
 	"golang.org/x/tools/go/analysis/passes/waitgroup"
-
-	// 2. Анализаторы staticcheck (классы SA, S, ST)
 	"honnef.co/go/tools/simple"
 	"honnef.co/go/tools/staticcheck"
 	"honnef.co/go/tools/stylecheck"
-
-	// 3. Стабильные публичные анализаторы (ПРОВЕРЕННЫЕ пути)
-	"github.com/gostaticanalysis/nilerr"
-	"github.com/nishanths/predeclared/passes/predeclared"
 )
 
 func main() {
 	var analyzers []*analysis.Analyzer
 
-	// 1. Стандартные
 	analyzers = append(analyzers,
 		appends.Analyzer,
 		atomicalign.Analyzer,
@@ -76,7 +69,6 @@ func main() {
 		waitgroup.Analyzer,
 	)
 
-	// Staticcheck
 	for _, a := range staticcheck.Analyzers {
 		analyzers = append(analyzers, a.Analyzer)
 	}
@@ -87,10 +79,9 @@ func main() {
 		analyzers = append(analyzers, a.Analyzer)
 	}
 
-	// Публичные анализаторы
 	analyzers = append(analyzers,
-		nilerr.Analyzer,      // Проверяет return err после if err != nil
-		predeclared.Analyzer, // Проверяет затенение встроенных имен (например, var copy = 1)
+		nilerr.Analyzer,
+		predeclared.Analyzer,
 	)
 
 	var osExitAnalyzer = &analysis.Analyzer{

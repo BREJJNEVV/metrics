@@ -44,6 +44,7 @@ type FileObserver struct {
 }
 
 // Event предоставляет событие аудита, содержащее метаданные о произошедшем действии.
+// generate:reset
 type Event struct {
 	IPAddr  string   `json:"ip_address"`
 	Metrics []string `json:"metrics"`

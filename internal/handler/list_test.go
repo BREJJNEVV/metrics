@@ -37,13 +37,13 @@ func ExampleMetricService_ListMetrics() {
 func TestListMetrics(t *testing.T) {
 
 	tests := []struct {
-		name        string
-		method      string
 		mockGauge   map[string]float64
 		mockCounter map[string]int64
+		name        string
+		method      string
 		wantCT      string
-		wantCode    int
 		wantBody    string
+		wantCode    int
 	}{
 		{
 			name:        "all ok",

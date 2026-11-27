@@ -23,36 +23,32 @@ type Observer interface {
 
 // Auditor координирует подписанных наблюдателей.
 type Auditor struct {
-	observers []Observer
 	logger    *zap.Logger
 	events    chan Event
+	observers []Observer
 	wg        sync.WaitGroup
 	mu        sync.Mutex
 }
 
 // URLObserver реализует Observer для доставки событий на удалённый HTTP-эндпоинт.
 type URLObserver struct {
-	url    string
 	client *http.Client
+	url    string
 }
 
 // FileObserver реализует Observer для записи событий в локальный файл.
 type FileObserver struct {
-	path string
 	file *os.File
+	path string
 	mu   sync.Mutex
 }
 
 // Event предоставляет событие аудита, содержащее метаданные о произошедшем действии.
+// generate:reset
 type Event struct {
-	// TS - время создания события.
-	TS int64 `json:"ts"`
-
-	// Metrics - слайс имён метрик.
+	IPAddr  string   `json:"ip_address"`
 	Metrics []string `json:"metrics"`
-
-	// IPAddr - адрес отправки события.
-	IPAddr string `json:"ip_address"`
+	TS      int64    `json:"ts"`
 }
 
 // Notify рассылает событие наблюдателям.

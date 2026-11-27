@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi"
 )
 
-// GetValueJSON обрабатывает POST-запросы на пути /value.
+// GetValue обрабатывает POST-запросы на пути /value.
 // Принимает тип и имя метрики в формате JSON в теле запроса.
 // Требует заголовок Content-Type: application/json.
 // Возвращает HTTP 200 и JSON с текущим значением метрики.

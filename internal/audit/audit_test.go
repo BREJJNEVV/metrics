@@ -34,9 +34,9 @@ func TestFileObserver_Handle(t *testing.T) {
 		t.Fatalf("Handle failed: %v", err)
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read file: %v", err)
+	data, readFileErr := os.ReadFile(path)
+	if readFileErr != nil {
+		t.Fatalf("read file: %v", readFileErr)
 	}
 
 	if !bytes.HasSuffix(data, []byte("\n")) {
@@ -70,16 +70,16 @@ func TestFileObserver_Appends(t *testing.T) {
 	e1 := Event{TS: 1, Metrics: []string{"A"}, IPAddr: "1.1.1.1"}
 	e2 := Event{TS: 2, Metrics: []string{"B"}, IPAddr: "2.2.2.2"}
 
-	if err := obs.Handle(e1); err != nil {
-		t.Fatalf("Handle e1: %v", err)
+	if obsErr1 := obs.Handle(e1); obsErr1 != nil {
+		t.Fatalf("Handle e1: %v", obsErr1)
 	}
-	if err := obs.Handle(e2); err != nil {
-		t.Fatalf("Handle e2: %v", err)
+	if obsErr2 := obs.Handle(e2); obsErr2 != nil {
+		t.Fatalf("Handle e2: %v", obsErr2)
 	}
 
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open: %v", err)
+	f, openErr := os.Open(path)
+	if openErr != nil {
+		t.Fatalf("open: %v", openErr)
 	}
 	defer f.Close()
 
@@ -88,8 +88,8 @@ func TestFileObserver_Appends(t *testing.T) {
 	for sc.Scan() {
 		lines = append(lines, sc.Text())
 	}
-	if err := sc.Err(); err != nil {
-		t.Fatalf("scan: %v", err)
+	if scErr := sc.Err(); scErr != nil {
+		t.Fatalf("scan: %v", scErr)
 	}
 
 	if len(lines) != 2 {
@@ -154,8 +154,8 @@ func TestURLObserver_HandleNon200(t *testing.T) {
 }
 
 type mockObserver struct {
-	events []Event
 	err    error
+	events []Event
 }
 
 func (m *mockObserver) Handle(e Event) error {

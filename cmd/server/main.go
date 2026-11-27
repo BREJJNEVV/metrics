@@ -162,13 +162,13 @@ func main() {
 
 type flags struct {
 	Address     string `env:"ADDRESS"`
-	Interval    int64  `env:"STORE_INTERVAL"`
 	StoragePath string `env:"FILE_STORAGE_PATH"`
-	Restore     bool   `env:"RESTORE"`
 	dbDSN       string `env:"DATABASE_DSN"`
 	key         string `env:"KEY"`
 	auditFile   string `env:"AUDIT_FILE"`
 	auditURL    string `env:"AUDIT_URL"`
+	Interval    int64  `env:"STORE_INTERVAL"`
+	Restore     bool   `env:"RESTORE"`
 }
 
 func setFlagsEnv() (flags, error) {

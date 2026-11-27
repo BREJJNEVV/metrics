@@ -34,13 +34,13 @@ func ExampleMetricService_GetValueJSON() {
 
 func TestGetValueJSON(t *testing.T) {
 	tests := []struct {
+		mockGauge   map[string]float64
+		mockCounter map[string]int64
 		name        string
 		body        string
 		ct          string
-		mockGauge   map[string]float64
-		mockCounter map[string]int64
-		wantCode    int
 		wantBody    string
+		wantCode    int
 	}{
 		{
 			name:      "gauge ok",

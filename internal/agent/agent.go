@@ -46,7 +46,7 @@ type MetricsReader interface {
 	Counters() map[string]int64
 }
 
-// MetricsStorage хранит
+// MetricsStorage хранит метрики
 type MetricsStorage struct {
 	counter map[string]int64
 	gauge   map[string]float64
@@ -56,9 +56,9 @@ type MetricsStorage struct {
 type AgentConfig struct {
 	Client  *http.Client
 	Logger  *zap.Logger
+	jobs    chan []model.Metrics
 	BaseURL string
 	Key     string
-	jobs    chan []model.Metrics
 }
 
 func Collect(mw MetricsWriter) {
@@ -191,9 +191,9 @@ func (a *AgentConfig) SendBatch(ctx context.Context, batch []model.Metrics) {
 	var statusCode int
 
 	err = retry.Do(ctx, isRetriable, func() error {
-		request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
-		if err != nil {
-			return err
+		request, reqErr := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressedData))
+		if reqErr != nil {
+			return reqErr
 		}
 		if a.Key != "" {
 			hash := sign.Sign(data, a.Key)
@@ -203,12 +203,12 @@ func (a *AgentConfig) SendBatch(ctx context.Context, batch []model.Metrics) {
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Content-Encoding", "gzip")
 
-		resp, err := a.Client.Do(request)
-		if err != nil {
+		resp, doErr := a.Client.Do(request)
+		if doErr != nil {
 			if resp != nil {
 				_ = resp.Body.Close()
 			}
-			return err
+			return doErr
 		}
 
 		_, _ = io.Copy(io.Discard, resp.Body)

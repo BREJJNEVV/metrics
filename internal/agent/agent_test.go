@@ -220,15 +220,15 @@ func TestCollectBatch_Empty(t *testing.T) {
 
 func TestIsRetriable(t *testing.T) {
 	tests := []struct {
-		name string
 		err  error
+		name string
 		want bool
 	}{
-		{"nil", nil, false},
-		{"generic", errors.New("some error"), false},
-		{"conn refused", syscall.ECONNREFUSED, true},
-		{"conn reset", syscall.ECONNRESET, true},
-		{"wrapped conn refused", fmt.Errorf("dial: %w", syscall.ECONNREFUSED), true},
+		{name: "nil", err: nil},
+		{name: "generic", err: errors.New("some error")},
+		{name: "conn refused", err: syscall.ECONNREFUSED},
+		{name: "conn reset", err: syscall.ECONNRESET},
+		{name: "wrapped conn refused", err: fmt.Errorf("dial: %w", syscall.ECONNREFUSED)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
